@@ -8,10 +8,6 @@ import {
   PetId,
   getPetCatalogEntry,
 } from '@/types/pet'
-import { OUTFIT_ITEMS } from '@/types/shop'
-
-const OUTFIT_IDS = new Set(OUTFIT_ITEMS.map((item) => item.id))
-
 interface PetState {
   name: string
   species: 'cat' | 'dog' | 'rabbit' | 'hamster'
@@ -31,7 +27,6 @@ interface PetState {
   setPetName: (name: string) => void
   setActivePet: (petId: PetId) => void
   setHasHydrated: (value: boolean) => void
-  setFromFirestore: (data: Partial<PetState>) => void
 }
 
 export const usePetStore = create<PetState>()(
@@ -76,21 +71,11 @@ export const usePetStore = create<PetState>()(
       },
 
       equipItem: (itemId) =>
-        set((state) => {
-          if (OUTFIT_IDS.has(itemId)) {
-            return {
-              equippedItems: state.equippedItems.includes(itemId)
-                ? state.equippedItems.filter((i) => i !== itemId)
-                : [...state.equippedItems, itemId],
-            }
-          }
-
-          return {
-            equippedItems: state.equippedItems.includes(itemId)
-              ? state.equippedItems.filter((i) => i !== itemId)
-              : [...state.equippedItems, itemId],
-          }
-        }),
+        set((state) => ({
+          equippedItems: state.equippedItems.includes(itemId)
+            ? state.equippedItems.filter((i) => i !== itemId)
+            : [...state.equippedItems, itemId],
+        })),
 
       setPetName: (name) => set({ name }),
 
@@ -100,8 +85,6 @@ export const usePetStore = create<PetState>()(
       },
 
       setHasHydrated: (value) => set({ _hasHydrated: value }),
-
-      setFromFirestore: (data) => set(data as PetState),
     }),
     {
       name: 'pet-storage',

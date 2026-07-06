@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from 'react'
-import { View, Text, ScrollView, TouchableOpacity, Alert, Switch } from 'react-native'
+import { View, Text, ScrollView, TouchableOpacity } from 'react-native'
 import { ThemedScreen } from '@/components/ThemedScreen'
 import { useAppTheme } from '@/hooks/useAppTheme'
 import { AppUsageChart } from '@/components/stats/AppUsageChart'
 import { AITip } from '@/components/stats/AITip'
+import { SettingsPanel } from '@/components/stats/SettingsPanel'
 import { useScreenTime } from '@/hooks/useScreenTime'
-import { useFocusStore, getWeeklySummary } from '@/stores/focusStore'
+import { useFocusStore, getSummary } from '@/stores/focusStore'
 import { MOOD_OPTIONS } from '@/types/focus'
 import { generateAITip } from '@/services/firebase/functions'
 import { requestUsageStatsPermission } from '@/services/usageStats'
@@ -14,24 +15,21 @@ import {
   requestNotificationPermission,
 } from '@/services/permissions'
 import { DayStats } from '@/types/focus'
-import { useRouter } from 'expo-router'
-import { useIdentityStore } from '@/stores/identityStore'
-import { useCameraSettingsStore } from '@/stores/cameraSettingsStore'
 import { usePetStatus } from '@/hooks/usePetStatus'
 
 type Tab = 'today' | 'week' | 'month'
 
+const TABS: { key: Tab; label: string; days: number; period: string }[] = [
+  { key: 'today', label: 'วันนี้', days: 1, period: 'วันนี้' },
+  { key: 'week', label: 'สัปดาห์', days: 7, period: 'สัปดาห์นี้' },
+  { key: 'month', label: 'เดือน', days: 30, period: 'เดือนนี้' },
+]
+
 export default function StatsScreen() {
-  const router = useRouter()
-  const resetEnrollment = useIdentityStore((s) => s.resetEnrollment)
-  const mirrorPreview = useCameraSettingsStore((s) => s.mirrorPreview)
-  const shutterSound = useCameraSettingsStore((s) => s.shutterSound)
-  const setMirrorPreview = useCameraSettingsStore((s) => s.setMirrorPreview)
-  const setShutterSound = useCameraSettingsStore((s) => s.setShutterSound)
   const [activeTab, setActiveTab] = useState<Tab>('today')
   const [aiTip, setAiTip] = useState<string | null>(null)
   const [tipLoading, setTipLoading] = useState(false)
-  const { surface, border } = useAppTheme()
+  const { surface } = useAppTheme()
 
   const [notificationGranted, setNotificationGranted] = useState(true)
 
@@ -39,42 +37,46 @@ export default function StatsScreen() {
   const { apps, totalMinutes, hasPermission, isLoading } = useScreenTime()
   const { currentStreak, totalFocusMinutes, moodLog } = useFocusStore()
 
-  const weekly = getWeeklySummary(moodLog)
-  const weeklyHours = Math.floor(weekly.focusMinutes / 60)
-  const weeklyMins = weekly.focusMinutes % 60
+  const activeRange = TABS.find((t) => t.key === activeTab) ?? TABS[0]
+  const summary = getSummary(moodLog, activeRange.days)
+  const summaryHours = Math.floor(summary.focusMinutes / 60)
+  const summaryMins = summary.focusMinutes % 60
   const moodEmoji =
-    weekly.avgMood != null
-      ? MOOD_OPTIONS[Math.min(4, Math.round(weekly.avgMood) - 1)].emoji
+    summary.avgMood != null
+      ? MOOD_OPTIONS[Math.min(4, Math.round(summary.avgMood) - 1)].emoji
       : '—'
 
-  function handleReEnroll() {
-    Alert.alert(
-      'ลงทะเบียนใบหน้าใหม่',
-      'ข้อมูลใบหน้าเดิมจะถูกลบจากเครื่อง ต้องถ่ายใหม่ก่อนใช้เควสทำงานบ้าน',
-      [
-        { text: 'ยกเลิก', style: 'cancel' },
-        {
-          text: 'ลงทะเบียนใหม่',
-          style: 'destructive',
-          onPress: async () => {
-            await resetEnrollment()
-            router.replace('/onboarding/face-enroll')
-          },
-        },
-      ]
-    )
-  }
-
-  const TABS: { key: Tab; label: string }[] = [
-    { key: 'today', label: 'วันนี้' },
-    { key: 'week', label: 'สัปดาห์' },
-    { key: 'month', label: 'เดือน' },
-  ]
-
   useEffect(() => {
-    loadTip()
     checkNotificationPermission().then(setNotificationGranted)
   }, [])
+
+  // Regenerate the tip once real usage data has loaded (and whenever it moves),
+  // instead of once on mount with zeroed-out stats.
+  useEffect(() => {
+    if (isLoading) return
+    let cancelled = false
+    async function loadTip() {
+      setTipLoading(true)
+      const todaySummary = getSummary(useFocusStore.getState().moodLog, 1)
+      const todayStats: DayStats = {
+        totalScreenTime: totalMinutes,
+        unlockCount: 0,
+        focusSessionsCompleted: todaySummary.sessions,
+        focusSessionsFailed: 0,
+        coinsEarned: 0,
+        topApps: apps,
+      }
+      const tip = await generateAITip(todayStats, todayStats, petName)
+      if (!cancelled) {
+        setAiTip(tip)
+        setTipLoading(false)
+      }
+    }
+    loadTip()
+    return () => {
+      cancelled = true
+    }
+  }, [isLoading, totalMinutes, petName])
 
   async function handleRequestNotification() {
     const granted = await requestNotificationPermission()
@@ -83,21 +85,6 @@ export default function StatsScreen() {
 
   async function handleRequestUsageAccess() {
     await requestUsageStatsPermission()
-  }
-
-  async function loadTip() {
-    setTipLoading(true)
-    const todayStats: DayStats = {
-      totalScreenTime: totalMinutes,
-      unlockCount: 0,
-      focusSessionsCompleted: 0,
-      focusSessionsFailed: 0,
-      coinsEarned: 0,
-      topApps: apps,
-    }
-    const tip = await generateAITip(todayStats, todayStats, petName)
-    setAiTip(tip)
-    setTipLoading(false)
   }
 
   const totalHours = Math.floor(totalMinutes / 60)
@@ -180,17 +167,17 @@ export default function StatsScreen() {
           </TouchableOpacity>
         )}
 
-        {/* Weekly summary (research-lite) */}
+        {/* Period summary (research-lite) */}
         <View style={{ backgroundColor: surface }} className="rounded-2xl p-4 mb-4">
-          <Text className="text-white font-semibold mb-3">สรุปสัปดาห์นี้ 📅</Text>
+          <Text className="text-white font-semibold mb-3">สรุป{activeRange.period} 📅</Text>
           <View className="flex-row justify-around">
             <View className="items-center">
-              <Text className="text-primary-light text-xl font-bold">{weekly.sessions}</Text>
+              <Text className="text-primary-light text-xl font-bold">{summary.sessions}</Text>
               <Text className="text-text-secondary text-xs mt-1">โฟกัสสำเร็จ</Text>
             </View>
             <View className="items-center">
               <Text className="text-yellow text-xl font-bold">
-                {weeklyHours > 0 ? `${weeklyHours}ชม. ${weeklyMins}น.` : `${weeklyMins} น.`}
+                {summaryHours > 0 ? `${summaryHours}ชม. ${summaryMins}น.` : `${summaryMins} น.`}
               </Text>
               <Text className="text-text-secondary text-xs mt-1">เวลาโฟกัส</Text>
             </View>
@@ -199,9 +186,9 @@ export default function StatsScreen() {
               <Text className="text-text-secondary text-xs mt-1">อารมณ์เฉลี่ย</Text>
             </View>
           </View>
-          {weekly.sessions === 0 && (
+          {summary.sessions === 0 && (
             <Text className="text-text-secondary text-xs text-center mt-3">
-              ทำ Focus session แล้วบันทึกอารมณ์ เพื่อดูแนวโน้มของสัปดาห์นี้
+              ทำ Focus session แล้วบันทึกอารมณ์ เพื่อดูแนวโน้มของ{activeRange.period}
             </Text>
           )}
         </View>
@@ -230,38 +217,8 @@ export default function StatsScreen() {
           </View>
         </View>
 
-        {/* Face enrollment */}
-        <View style={{ backgroundColor: surface }} className="mt-3 rounded-2xl p-4">
-          <Text className="text-white font-semibold mb-2">ยืนยันตัวตน</Text>
-          <Text className="text-text-secondary text-xs mb-3">
-            ใช้สำหรับเควสทำงานบ้าน — เก็บเฉพาะข้อมูลตัวเลขบนเครื่อง ไม่เก็บรูป
-          </Text>
-          <TouchableOpacity
-            onPress={handleReEnroll}
-            className="rounded-xl py-3 items-center border border-white/20 mb-4"
-          >
-            <Text className="text-white font-semibold text-sm">ลงทะเบียนใบหน้าใหม่</Text>
-          </TouchableOpacity>
-          <Text className="text-text-secondary text-xs mb-2">ตั้งค่ากล้อง (ถ่ายรูป / เควส)</Text>
-          <View className="flex-row items-center justify-between py-2">
-            <Text className="text-white/80 text-sm flex-1 pr-2">กลับด้านภาพ (กล้องหน้า)</Text>
-            <Switch
-              value={mirrorPreview}
-              onValueChange={setMirrorPreview}
-              trackColor={{ false: '#3f4f46', true: '#5DB347' }}
-              thumbColor="#fff"
-            />
-          </View>
-          <View className="flex-row items-center justify-between py-2">
-            <Text className="text-white/80 text-sm flex-1 pr-2">เสียงชัตเตอร์</Text>
-            <Switch
-              value={shutterSound}
-              onValueChange={setShutterSound}
-              trackColor={{ false: '#3f4f46', true: '#5DB347' }}
-              thumbColor="#fff"
-            />
-          </View>
-        </View>
+        {/* Identity & camera settings */}
+        <SettingsPanel />
       </ScrollView>
     </ThemedScreen>
   )

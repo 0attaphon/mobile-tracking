@@ -36,12 +36,3 @@ function generateLocalTip(today: DayStats, yesterday: DayStats, petName: string)
   }
   return `วันนี้เป็นวันที่ดี ลองทำ Focus session สั้นๆ สัก 30 นาทีไหม? ${petName}จะมีความสุขมากเลย! 🌟`
 }
-
-export async function callUpdateStreak(userId: string) {
-  try {
-    const fn = httpsCallable(functions, 'updateStreak')
-    await fn({ userId })
-  } catch {
-    // handled locally
-  }
-}

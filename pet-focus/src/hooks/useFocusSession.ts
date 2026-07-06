@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 import { Alert, Platform } from 'react-native'
 import { useFocusStore, getCoinsForDuration } from '@/stores/focusStore'
 import { usePetStore } from '@/stores/petStore'
@@ -56,8 +56,13 @@ export function useFocusSession() {
 
   const { addCoins, addExp, updateHappiness } = usePetStore()
 
+  // Guards the session outcome so it fires exactly once, regardless of which
+  // path (native complete event, native tick, or JS-fallback tick) reaches 0.
+  const settledRef = useRef(false)
+
   useEffect(() => {
     if (status !== 'in_progress') return
+    settledRef.current = false
 
     const packages = DEFAULT_BLOCKED_APPS.map((a) => a.packageName)
     const totalSeconds = selectedMinutes * 60
@@ -87,7 +92,10 @@ export function useFocusSession() {
   }, [status])
 
   function handleComplete() {
-    if (useFocusStore.getState().status !== 'in_progress') return
+    if (settledRef.current) return
+    const s = useFocusStore.getState().status
+    if (s !== 'in_progress' && s !== 'completed') return
+    settledRef.current = true
     stopFocusTimer().catch(() => { })
     const coins = getCoinsForDuration(selectedMinutes)
     addCoins(coins)
@@ -103,7 +111,9 @@ export function useFocusSession() {
   }
 
   function handleFail() {
+    if (settledRef.current) return
     if (useFocusStore.getState().status !== 'in_progress') return
+    settledRef.current = true
     stopFocusTimer().catch(() => { })
     failSession()
     syncFocusSession({

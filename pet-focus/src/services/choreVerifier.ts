@@ -12,27 +12,6 @@ export interface ChoreVerifyResult {
   detectedLabels?: DetectedLabel[]
 }
 
-function logMlKitLabels(quest: ChoreQuest, labels: DetectedLabel[], matchedLabels: string[]) {
-  const sorted = [...labels].sort((a, b) => b.confidence - a.confidence)
-  const lines = sorted.map((l) => `  ${l.text} (${Math.round(l.confidence * 100)}%)`)
-
-  // console.log(
-  //   `[ChoreVerify] quest=${quest.id} (${quest.title})\n` +
-  //     `  expected: ${quest.expectedLabels.join(', ')} (need ${quest.minLabelMatches} @ ≥${Math.round(quest.minConfidence * 100)}%)\n` +
-  //     `  matched: ${matchedLabels.length ? matchedLabels.join(', ') : '(none)'}\n` +
-  //     `  ML Kit labels (${sorted.length}):\n${lines.join('\n') || '  (empty)'}`
-  // )
-}
-
-function formatDetectedLabelsHint(labels: DetectedLabel[], limit = 8): string {
-  const top = [...labels]
-    .sort((a, b) => b.confidence - a.confidence)
-    .slice(0, limit)
-    .map((l) => `${l.text} ${Math.round(l.confidence * 100)}%`)
-  if (top.length === 0) return ''
-  return `\n\nML Kit เห็น:\n${top.join('\n')}`
-}
-
 export async function verifyChoreLabels(
   uri: string,
   quest: ChoreQuest
@@ -58,16 +37,11 @@ export async function verifyChoreLabels(
     )
     .map((label) => label.text)
 
-  // logMlKitLabels(quest, detectedLabels, matchedLabels)
-
   if (matchedLabels.length >= quest.minLabelMatches) {
     return { matched: true, matchedLabels, detectedLabels }
   }
 
-  const reason =
-    'ไม่พบหลักฐานงานบ้านที่ตรงเควส'
-    //  +
-    // (__DEV__ ? formatDetectedLabelsHint(detectedLabels) : '')
+  const reason = 'ไม่พบหลักฐานงานบ้านที่ตรงเควส'
 
   return {
     matched: false,

@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { AppState, AppStateStatus } from 'react-native'
 import { AppUsage } from '@/types/focus'
 import { getTodayAppUsage, checkUsageStatsPermission } from '@/services/usageStats'
@@ -11,6 +11,7 @@ export function useScreenTime() {
   const [totalMinutes, setTotalMinutes] = useState(0)
   const [hasPermission, setHasPermission] = useState(false)
   const [isLoading, setIsLoading] = useState(true)
+  const lastSyncSig = useRef<string>('')
 
   const refresh = useCallback(async () => {
     const perm = await checkUsageStatsPermission()
@@ -22,11 +23,18 @@ export function useScreenTime() {
     setIsLoading(false)
 
     if (useUserStore.getState().isRegistered) {
-      syncDailyUsage({
-        totalScreenMinutes: total,
-        focusMinutes: useFocusStore.getState().totalFocusMinutes,
-        topApps: data.slice(0, 5),
-      }).catch(() => {})
+      const focusMinutes = useFocusStore.getState().totalFocusMinutes
+      // Skip redundant upserts — foregrounding the app shouldn't re-sync
+      // unchanged numbers on every AppState 'active' event.
+      const sig = `${total}|${focusMinutes}`
+      if (sig !== lastSyncSig.current) {
+        lastSyncSig.current = sig
+        syncDailyUsage({
+          totalScreenMinutes: total,
+          focusMinutes,
+          topApps: data.slice(0, 5),
+        }).catch(() => {})
+      }
     }
   }, [])
 

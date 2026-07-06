@@ -2,6 +2,13 @@ import { create } from 'zustand'
 import { persist, createJSONStorage } from 'zustand/middleware'
 import AsyncStorage from '@react-native-async-storage/async-storage'
 import { FocusSessionStatus, FOCUS_REWARDS, MoodValue, MoodEntry } from '@/types/focus'
+import { todayKey } from '@/utils/imageTensor'
+
+function dayKeyOffset(days: number): string {
+  const d = new Date()
+  d.setUTCDate(d.getUTCDate() + days)
+  return d.toISOString().split('T')[0]
+}
 
 interface FocusState {
   status: FocusSessionStatus
@@ -24,7 +31,6 @@ interface FocusState {
   completeSession: () => void
   failSession: () => void
   resetSession: () => void
-  updateStreak: (streak: number, lastDate: string, longest: number) => void
   logMood: (mood: MoodValue, minutes: number) => void
 }
 
@@ -83,10 +89,24 @@ export const useFocusStore = create<FocusState>()(
       completeSession: () =>
         set((state) => {
           if (state.status !== 'in_progress' && state.status !== 'completed') return state
+
+          const today = todayKey()
+          let currentStreak = state.currentStreak
+          let longestStreak = state.longestStreak
+          let lastFocusDate = state.lastFocusDate
+          if (state.lastFocusDate !== today) {
+            currentStreak = state.lastFocusDate === dayKeyOffset(-1) ? state.currentStreak + 1 : 1
+            longestStreak = Math.max(state.longestStreak, currentStreak)
+            lastFocusDate = today
+          }
+
           return {
             status: 'completed',
             isPaused: false,
             totalFocusMinutes: state.totalFocusMinutes + state.selectedMinutes,
+            currentStreak,
+            longestStreak,
+            lastFocusDate,
           }
         }),
 
@@ -103,9 +123,6 @@ export const useFocusStore = create<FocusState>()(
           remainingSeconds: state.selectedMinutes * 60,
           sessionStartTime: null,
         })),
-
-      updateStreak: (streak, lastDate, longest) =>
-        set({ currentStreak: streak, lastFocusDate: lastDate, longestStreak: longest }),
 
       logMood: (mood, minutes) =>
         set((state) => ({
@@ -133,15 +150,15 @@ export function getCoinsForDuration(minutes: number): number {
   return FOCUS_REWARDS[minutes]?.coins ?? 10
 }
 
-export interface WeeklySummary {
+export interface MoodSummary {
   sessions: number
   focusMinutes: number
   avgMood: number | null
 }
 
-export function getWeeklySummary(moodLog: MoodEntry[]): WeeklySummary {
-  const weekAgo = Date.now() - 7 * 24 * 60 * 60 * 1000
-  const recent = moodLog.filter((e) => new Date(e.date).getTime() >= weekAgo)
+export function getSummary(moodLog: MoodEntry[], days: number): MoodSummary {
+  const since = Date.now() - days * 24 * 60 * 60 * 1000
+  const recent = moodLog.filter((e) => new Date(e.date).getTime() >= since)
   const sessions = recent.length
   const focusMinutes = recent.reduce((sum, e) => sum + e.minutes, 0)
   const avgMood =

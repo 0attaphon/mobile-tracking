@@ -21,7 +21,9 @@ export default function RootLayout() {
   }, [])
 
   useEffect(() => {
-    if (__DEV__ && petHydrated) {
+    // Dev convenience: seed coins only when the wallet is empty, so it never
+    // wipes a balance you're actively testing spending/earning against.
+    if (__DEV__ && petHydrated && usePetStore.getState().coins === 0) {
       usePetStore.setState({ coins: 10000 })
     }
   }, [petHydrated])
