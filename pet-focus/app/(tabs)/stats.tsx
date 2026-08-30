@@ -5,6 +5,7 @@ import { useAppTheme } from '@/hooks/useAppTheme'
 import { AppUsageChart } from '@/components/stats/AppUsageChart'
 import { AITip } from '@/components/stats/AITip'
 import { SettingsPanel } from '@/components/stats/SettingsPanel'
+import { ClassLeaderboard } from '@/components/stats/ClassLeaderboard'
 import { useScreenTime } from '@/hooks/useScreenTime'
 import { useFocusStore, getSummary } from '@/stores/focusStore'
 import { MOOD_OPTIONS } from '@/types/focus'
@@ -35,7 +36,7 @@ export default function StatsScreen() {
 
   const { name: petName } = usePetStatus()
   const { apps, totalMinutes, hasPermission, isLoading } = useScreenTime()
-  const { currentStreak, totalFocusMinutes, moodLog } = useFocusStore()
+  const { currentStreak, totalFocusMinutes, moodLog, freezeTokens } = useFocusStore()
 
   const activeRange = TABS.find((t) => t.key === activeTab) ?? TABS[0]
   const summary = getSummary(moodLog, activeRange.days)
@@ -134,6 +135,9 @@ export default function StatsScreen() {
           <View style={{ backgroundColor: surface }} className="flex-1 rounded-2xl p-4 items-center">
             <Text className="text-2xl font-bold text-primary-light">{currentStreak}</Text>
             <Text className="text-text-secondary text-xs mt-1">วัน Streak</Text>
+            {freezeTokens > 0 && (
+              <Text className="text-primary-light text-[10px] mt-0.5">🧊 x{freezeTokens}</Text>
+            )}
           </View>
           <View style={{ backgroundColor: surface }} className="flex-1 rounded-2xl p-4 items-center">
             <Text className="text-2xl font-bold text-yellow">{Math.floor(totalFocusMinutes / 60)}</Text>
@@ -216,6 +220,9 @@ export default function StatsScreen() {
             </View>
           </View>
         </View>
+
+        {/* Class leaderboard */}
+        <ClassLeaderboard />
 
         {/* Identity & camera settings */}
         <SettingsPanel />

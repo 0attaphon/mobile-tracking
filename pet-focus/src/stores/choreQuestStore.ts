@@ -14,12 +14,17 @@ export interface ChoreQuestProgress {
   lastResult?: { matched: boolean; reason?: string }
 }
 
+const MAX_RECENT_HASHES = 5
+
 interface ChoreQuestState {
   progress: ChoreQuestProgress[]
+  recentHashes: Record<string, string[]>
   ensureToday: () => void
   getQuestProgress: (questId: string) => ChoreQuestProgress
   recordAttempt: (questId: string, matched: boolean, reason?: string) => void
   completeQuest: (quest: ChoreQuest) => boolean
+  isDuplicateHash: (questId: string, hash: string) => boolean
+  recordHash: (questId: string, hash: string) => void
 }
 
 function defaultProgress(questId: string): ChoreQuestProgress {
@@ -30,6 +35,7 @@ export const useChoreQuestStore = create<ChoreQuestState>()(
   persist(
     (set, get) => ({
       progress: [],
+      recentHashes: {},
 
       ensureToday: () => {
         const today = todayKey()
@@ -88,6 +94,24 @@ export const useChoreQuestStore = create<ChoreQuestState>()(
           coinsEarned: quest.reward.coins,
         }).catch(() => {})
         return true
+      },
+
+      isDuplicateHash: (questId, hash) => {
+        const hashes = get().recentHashes[questId] ?? []
+        return hashes.includes(hash)
+      },
+
+      recordHash: (questId, hash) => {
+        set((state) => {
+          const existing = state.recentHashes[questId] ?? []
+          const next = [hash, ...existing.filter((h) => h !== hash)].slice(
+            0,
+            MAX_RECENT_HASHES
+          )
+          return {
+            recentHashes: { ...state.recentHashes, [questId]: next },
+          }
+        })
       },
     }),
     {

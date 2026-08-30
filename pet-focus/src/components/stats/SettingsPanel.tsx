@@ -1,9 +1,13 @@
-import React from 'react'
-import { View, Text, TouchableOpacity, Alert, Switch } from 'react-native'
+import React, { useState } from 'react'
+import { View, Text, TouchableOpacity, Alert, Switch, TextInput } from 'react-native'
 import { useRouter } from 'expo-router'
 import { useAppTheme } from '@/hooks/useAppTheme'
 import { useIdentityStore } from '@/stores/identityStore'
 import { useCameraSettingsStore } from '@/stores/cameraSettingsStore'
+import { useUserStore } from '@/stores/userStore'
+import { syncNickname } from '@/services/supabase/sync'
+
+const MAX_NICKNAME_LENGTH = 20
 
 export function SettingsPanel() {
   const router = useRouter()
@@ -13,6 +17,15 @@ export function SettingsPanel() {
   const shutterSound = useCameraSettingsStore((s) => s.shutterSound)
   const setMirrorPreview = useCameraSettingsStore((s) => s.setMirrorPreview)
   const setShutterSound = useCameraSettingsStore((s) => s.setShutterSound)
+  const nickname = useUserStore((s) => s.nickname)
+  const setNickname = useUserStore((s) => s.setNickname)
+  const [nicknameDraft, setNicknameDraft] = useState(nickname ?? '')
+
+  function handleSaveNickname() {
+    const trimmed = nicknameDraft.trim()
+    setNickname(trimmed || null)
+    syncNickname(trimmed).catch(() => {})
+  }
 
   function handleReEnroll() {
     Alert.alert(
@@ -34,6 +47,20 @@ export function SettingsPanel() {
 
   return (
     <View style={{ backgroundColor: surface }} className="mt-3 rounded-2xl p-4">
+      <Text className="text-white font-semibold mb-2">ชื่อเล่นที่เพื่อนในห้องเห็น</Text>
+      <Text className="text-text-secondary text-xs mb-3">
+        ใช้แสดงบนอันดับห้อง (Leaderboard) แทนรหัสนักเรียนจริง
+      </Text>
+      <TextInput
+        value={nicknameDraft}
+        onChangeText={setNicknameDraft}
+        onBlur={handleSaveNickname}
+        placeholder="เช่น น้องแมว"
+        placeholderTextColor="rgba(255,255,255,0.4)"
+        maxLength={MAX_NICKNAME_LENGTH}
+        className="bg-white/10 text-white rounded-xl px-4 py-3 mb-4 text-base"
+      />
+
       <Text className="text-white font-semibold mb-2">ยืนยันตัวตน</Text>
       <Text className="text-text-secondary text-xs mb-3">
         ใช้สำหรับเควสทำงานบ้าน — เก็บเฉพาะข้อมูลตัวเลขบนเครื่อง ไม่เก็บรูป

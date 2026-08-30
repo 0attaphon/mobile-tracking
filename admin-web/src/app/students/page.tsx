@@ -8,7 +8,7 @@ export default async function StudentsPage() {
 
   const { data: students } = await supabase
     .from('students')
-    .select('id, student_id, created_at')
+    .select('id, student_id, created_at, class_name')
     .order('created_at', { ascending: false })
 
   return (
@@ -21,6 +21,7 @@ export default async function StudentsPage() {
             <thead className="bg-slate-900 text-slate-400">
               <tr>
                 <th className="text-left px-4 py-3">รหัสนักเรียน</th>
+                <th className="text-left px-4 py-3">ห้องเรียน</th>
                 <th className="text-left px-4 py-3">ลงทะเบียนเมื่อ</th>
                 <th className="text-left px-4 py-3"></th>
               </tr>
@@ -29,6 +30,7 @@ export default async function StudentsPage() {
               {(students ?? []).map((s) => (
                 <tr key={s.id} className="border-t border-slate-800">
                   <td className="px-4 py-3 font-medium">{s.student_id}</td>
+                  <td className="px-4 py-3 text-slate-400">{s.class_name ?? '-'}</td>
                   <td className="px-4 py-3 text-slate-400">
                     {new Date(s.created_at).toLocaleString('th-TH')}
                   </td>
@@ -41,7 +43,7 @@ export default async function StudentsPage() {
               ))}
               {(students ?? []).length === 0 ? (
                 <tr>
-                  <td colSpan={3} className="px-4 py-8 text-center text-slate-500">
+                  <td colSpan={4} className="px-4 py-8 text-center text-slate-500">
                     ยังไม่มีนักเรียนลงทะเบียน
                   </td>
                 </tr>

@@ -12,7 +12,7 @@ import { getCoinsForDuration, useFocusStore } from '@/stores/focusStore'
 import { MoodValue } from '@/types/focus'
 
 export default function FocusScreen() {
-  const { status, isPaused, selectedMinutes, remainingSeconds, begin, cancel, reset, selectDuration } =
+  const { status, isPaused, selectedMinutes, remainingSeconds, begin, cancel, reset, selectDuration, lastReward } =
     useFocusSession()
   const { name } = usePetStatus()
   const { surface } = useAppTheme()
@@ -101,9 +101,11 @@ export default function FocusScreen() {
             <Text className="text-text-secondary text-sm mt-2 text-center">
               {name}มีความสุขมากขึ้นเลย
             </Text>
-            <View className="flex-row gap-4 mt-4 mb-6">
+            <View className="flex-row gap-4 mt-4 mb-2">
               <View className="items-center">
-                <Text className="text-yellow text-2xl font-bold">+{getCoinsForDuration(selectedMinutes)}</Text>
+                <Text className="text-yellow text-2xl font-bold">
+                  +{lastReward?.coins ?? getCoinsForDuration(selectedMinutes)}
+                </Text>
                 <Text className="text-text-secondary text-xs">เหรียญ ⭐</Text>
               </View>
               <View className="items-center">
@@ -111,6 +113,23 @@ export default function FocusScreen() {
                 <Text className="text-text-secondary text-xs">ความสุข 😊</Text>
               </View>
             </View>
+            {lastReward?.usedFreeze ? (
+              <Text className="text-primary-light text-xs font-semibold mb-1">
+                🧊 ใช้ Streak Freeze รักษาสตรีคไว้ให้
+              </Text>
+            ) : null}
+            {lastReward?.catchUpApplied ? (
+              <Text className="text-yellow text-xs font-semibold mb-1">
+                🔥 โบนัสกลับมาโฟกัส! เหรียญ 2 เท่า
+              </Text>
+            ) : null}
+            {lastReward && lastReward.streakBonus > 0 ? (
+              <Text className="text-primary-light text-xs font-semibold mb-4">
+                +{lastReward.streakBonus} โบนัสต่อเนื่อง 🔥
+              </Text>
+            ) : (
+              <View className="mb-4" />
+            )}
             <TouchableOpacity
               onPress={() => setMoodStep(true)}
               className="bg-primary-light rounded-xl py-3 px-8"

@@ -179,3 +179,35 @@ export async function syncChoreCompletion(input: {
     },
   })
 }
+
+export async function syncNickname(nickname: string): Promise<void> {
+  if (!isSupabaseConfigured || !useUserStore.getState().isRegistered) return
+  const authId = await getStudentAuthId()
+  if (!authId) return
+  try {
+    await supabase.from('students').update({ nickname }).eq('id', authId)
+  } catch {
+    // best-effort — nickname is a cosmetic field, never crash the caller
+  }
+}
+
+export interface ClassLeaderboardEntry {
+  studentId: string | null
+  nickname: string
+  focusMinutes: number
+  rank: number
+  isMe: boolean
+}
+
+export async function fetchClassLeaderboard(): Promise<ClassLeaderboardEntry[]> {
+  if (!isSupabaseConfigured) return []
+  const { data, error } = await supabase.rpc('get_class_leaderboard')
+  if (error || !data) return []
+  return data.map((row: any) => ({
+    studentId: row.student_id,
+    nickname: row.nickname,
+    focusMinutes: row.focus_minutes,
+    rank: row.rnk,
+    isMe: row.is_me,
+  }))
+}

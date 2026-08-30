@@ -1,6 +1,8 @@
 import ImageLabeling from '@react-native-ml-kit/image-labeling'
 import { ChoreQuest } from '@/types/focus'
 import { verifyFace } from '@/services/faceVerifier'
+import { hashImageFile } from '@/utils/imageHash'
+import { useChoreQuestStore } from '@/stores/choreQuestStore'
 
 export type DetectedLabel = { text: string; confidence: number }
 
@@ -64,6 +66,15 @@ export async function verifyChorePhoto(
     }
   }
 
+  const hash = await hashImageFile(uri)
+  if (useChoreQuestStore.getState().isDuplicateHash(quest.id, hash)) {
+    return {
+      passed: false,
+      reason: 'รูปนี้เคยใช้ส่งแล้ว กรุณาถ่ายรูปใหม่',
+      faceSimilarity: face.similarity,
+    }
+  }
+
   const chore = await verifyChoreLabels(uri, quest)
   if (!chore.matched) {
     return {
@@ -74,6 +85,8 @@ export async function verifyChorePhoto(
       detectedLabels: chore.detectedLabels,
     }
   }
+
+  useChoreQuestStore.getState().recordHash(quest.id, hash)
 
   return {
     passed: true,

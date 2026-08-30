@@ -6,11 +6,11 @@ export interface FocusReward {
 }
 
 export const FOCUS_REWARDS: Record<number, FocusReward> = {
-  30: { coins: 10, label: '30 นาที' },
-  60: { coins: 25, label: '1 ชั่วโมง' },
-  120: { coins: 60, label: '2 ชั่วโมง' },
-  180: { coins: 100, label: '3 ชั่วโมง' },
-  240: { coins: 150, label: '4 ชั่วโมง' },
+  30: { coins: 15, label: '30 นาที' },
+  60: { coins: 40, label: '1 ชั่วโมง' },
+  120: { coins: 100, label: '2 ชั่วโมง' },
+  180: { coins: 160, label: '3 ชั่วโมง' },
+  240: { coins: 240, label: '4 ชั่วโมง' },
 }
 
 export interface FocusSession {
@@ -85,7 +85,7 @@ export const CHORE_QUESTS: ChoreQuest[] = [
     ],
     minConfidence: 0.5,
     minLabelMatches: 2,
-    reward: { coins: 15 },
+    reward: { coins: 25 },
   },
   {
     id: 'chore_dishes',
@@ -108,7 +108,7 @@ export const CHORE_QUESTS: ChoreQuest[] = [
     ],
     minConfidence: 0.5,
     minLabelMatches: 2,
-    reward: { coins: 15 },
+    reward: { coins: 25 },
   },
   {
     id: 'chore_desk',
@@ -131,7 +131,7 @@ export const CHORE_QUESTS: ChoreQuest[] = [
     ],
     minConfidence: 0.5,
     minLabelMatches: 2,
-    reward: { coins: 15 },
+    reward: { coins: 25 },
   },
   {
     id: 'chore_laundry',
@@ -153,7 +153,54 @@ export const CHORE_QUESTS: ChoreQuest[] = [
     ],
     minConfidence: 0.5,
     minLabelMatches: 2,
-    reward: { coins: 15 },
+    reward: { coins: 25 },
+  },
+  {
+    id: 'chore_water_plants',
+    title: 'รดน้ำต้นไม้',
+    description: 'ถ่ายรูปขณะรดน้ำต้นไม้หรือหลังรดเสร็จ ให้เห็นทั้งใบหน้าและต้นไม้',
+    // ยังไม่เคยทดสอบบนอุปกรณ์จริง — เช็ค label จริงที่ ML Kit คืนก่อนใช้งานจริง (ดูแบบ chore_sweep)
+    expectedLabels: [
+      'plant',
+      'houseplant',
+      'flowerpot',
+      'pot',
+      'leaf',
+      'flora',
+      'watering can',
+      'water',
+      'green',
+      'garden',
+      'indoor',
+      'room',
+      'home',
+    ],
+    minConfidence: 0.5,
+    minLabelMatches: 2,
+    reward: { coins: 25 },
+  },
+  {
+    id: 'chore_make_bed',
+    title: 'จัดเตียงนอน',
+    description: 'ถ่ายรูปเตียงที่จัดเรียบร้อยแล้ว ให้เห็นทั้งใบหน้าและเตียง',
+    // ยังไม่เคยทดสอบบนอุปกรณ์จริง — เช็ค label จริงที่ ML Kit คืนก่อนใช้งานจริง (ดูแบบ chore_sweep)
+    expectedLabels: [
+      'bed',
+      'bedroom',
+      'bedding',
+      'pillow',
+      'blanket',
+      'linens',
+      'furniture',
+      'room',
+      'indoor',
+      'home',
+      'pattern',
+      'textile',
+    ],
+    minConfidence: 0.5,
+    minLabelMatches: 2,
+    reward: { coins: 25 },
   },
 ]
 

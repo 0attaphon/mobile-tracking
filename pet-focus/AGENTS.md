@@ -28,14 +28,14 @@ npm run android        # build dev client ครั้งแรก
 - **มือถือจริง (Wi‑Fi อย่างเดียว):** `npm start` หรือ `npm run start:tunnel`
 - โมเดลใบหน้า: `assets/models/mobile_face_net.tflite` (ต้องเป็นไฟล์ binary จริง ไม่ใช่ HTML)
 - ไอคอนแอป: `assets/icon_pet.png` · Splash/loading: `assets/pet_loading.png`
-- Rive: แมว (`pet_cat.riv`) · แมวส้ม/หมา (`pet_dog_and_cat.riv`, input `cat/dog`: false=แมวส้ม, true=หมา); outfit inputs ทุกสัตว์: `straw_hat`, `wizard_hat`, `sunglass`
+- Rive: แมว (`pet_cat.riv`) · แมวส้ม/หมา (`pet_dog_and_cat.riv`, input `cat/dog`: false=แมวส้ม, true=หมา); outfit inputs ทุกสัตว์: `straw_hat`, `wizard_hat`, `sunglass`, `hat`, `hat2`–`hat10`, `hood`, `suit`, `coat`, `uniform`, `glass2` (ไฟล์ cloud `Pet_cat` มี layer/input ครบแล้ว — export `.riv` ใหม่ทับ `assets/rive/pet_cat.riv` ต้องอัปเกรดแพลนของ Rive ก่อน MCP export ไม่ได้; `pet_dog_and_cat.riv` ยังไม่ยืนยันว่ามี input ชุดใหม่ ต้องเปิดไฟล์นั้นเช็ค/เพิ่ม layer ให้ตรงกันถ้าต้องการให้หมา/แมวส้มใส่ชุดใหม่ได้ด้วย)
 
 ## โครงสร้างหน้า (app/(tabs)/)
 - `index.tsx` — หน้า Home: สัตว์เลี้ยง (Rive + เครื่องแต่งกาย), HUD, stat bar, ของตกแต่ง, **แต่งตัว** (`OutfitPicker`), **แตะชื่อเปลี่ยนชื่อ**, **sidebar สลับสัตว์** (`PetSwitcherSidebar`)
 - `focus.tsx` — Focus Mode: เลือกเวลา, timer ring, เริ่ม/ยกเลิก, modal สำเร็จ + **mood check-in**, modal fail (เชิงบวก)
-- `quests.tsx` — **เควสทำงานบ้าน**: ถ่ายรูป in-app หรือเลือกจากคลัง → ML Kit ตรวจ label + เทียบใบหน้า (local) → รับเหรียญ, ไม่เก็บรูป; แบนเนอร์ลงทะเบียนใบหน้าถ้ายังไม่ enroll
+- `quests.tsx` — **เควสทำงานบ้าน**: ถ่ายรูป in-app เท่านั้น (**ตัดปุ่มเลือกจากคลังออกแล้ว** — กันเอารูปเก่า/รูปจากที่อื่นมาส่ง) → ML Kit ตรวจ label + เทียบใบหน้า (local) + เช็ค hash รูปซ้ำ → รับเหรียญ, ไม่เก็บรูป; แบนเนอร์ลงทะเบียนใบหน้าถ้ายังไม่ enroll
 - `shop.tsx` — ร้านค้า: ซื้อด้วยเหรียญ ⭐; แท็บแต่งตัว (PNG thumbnail) · แท็บสัตว์ → ซื้อหมา/แมวส้ม และสลับ active pet
-- `stats.tsx` — สถิติ: screen time วันนี้, streak, สรุปสัปดาห์, AI tip, กราฟแอป, **ลงทะเบียนใบหน้าใหม่**
+- `stats.tsx` — สถิติ: screen time วันนี้, streak (+ freeze token คงเหลือ), สรุปสัปดาห์, AI tip, กราฟแอป, **อันดับห้อง (Class Leaderboard)**, ตั้งชื่อเล่นที่เพื่อนเห็น, **ลงทะเบียนใบหน้าใหม่**
 
 ## Onboarding (app/onboarding/)
 - `student-register.tsx` — **ครั้งแรก**: ใส่รหัสนักเรียน → Supabase anonymous auth + RPC `register_student` (1 รหัส = 1 เครื่อง) → เข้า tabs ทันที; UI ใช้ `bg-background` + `text-white`/`text-white/60` (เหมือน tabs)
@@ -50,9 +50,9 @@ npm run android        # build dev client ครั้งแรก
 
 ## Stores (Zustand, src/stores/)
 - `petStore` — name/level/exp/hp/happiness/coins, `activePetId`, `species`, equippedItems; `setActivePet/setPetName/...`; **persist** `name`, `activePetId`, `species` (`pet-storage`)
-- `userStore` — `studentId`, `isRegistered` (**persist**), ownedItems; `setRegistered(studentId)`
-- `focusStore` — สถานะ session (`idle`/`in_progress`/`completed`/`failed`), `isPaused`, timer, streak, totalFocusMinutes, **moodLog (persist AsyncStorage)**; helper `getCoinsForDuration`, `getWeeklySummary`
-- `choreQuestStore` — สถานะเควสทำงานบ้านรายวัน (completedAt, retryCount), daily reset, ให้ coins ตอน complete
+- `userStore` — `studentId`, `isRegistered` (**persist**), `nickname` (**persist**, ชื่อเล่นที่เพื่อนร่วมห้องเห็นบน leaderboard — แยกจากชื่อสัตว์เลี้ยงใน `petStore`), ownedItems; `setRegistered(studentId)`, `setNickname`
+- `focusStore` — สถานะ session (`idle`/`in_progress`/`completed`/`failed`), `isPaused`, timer, streak, totalFocusMinutes, **moodLog (persist AsyncStorage)**; helper `getCoinsForDuration`, `getSummary`; **`STREAK_BONUSES`** ให้โบนัสเหรียญเมื่อสตรีคถึง 1/3/7/14/30 วัน; **catch-up**: ขาดสตรีคแล้วกลับมาโฟกัสภายในเงื่อนไข (สตรีคเดิม ≥3, ไม่มี freeze) → เหรียญ 2 เท่าครั้งเดียว (`catchUpAvailable`); **Streak Freeze** (`freezeTokens`, สะสมสูงสุด 3, ได้ +1 ทุกสตรีคครบ 7 วัน) — ถ้ามี freeze ตอนขาดสตรีค จะใช้อัตโนมัติรักษาสตรีคไว้แทนการขาด (ไม่ได้โบนัส catch-up ซ้ำ)
+- `choreQuestStore` — สถานะเควสทำงานบ้านรายวัน (completedAt, retryCount), daily reset, ให้ coins ตอน complete; เก็บ `recentHashes` (hash รูป 5 รูปล่าสุดต่อเควส, local เท่านั้น) กันส่งรูปเดิมซ้ำ
 - `identityStore` — `faceEnrolled` flag (AsyncStorage) + sync กับ SecureStore embedding
 - `shopStore` — activeCategory
 - `roomStore` — พื้นหลัง/สี theme/ของตกแต่งที่วาง
@@ -66,16 +66,16 @@ npm run android        # build dev client ครั้งแรก
 - `permissions.ts` — ขอสิทธิ์แจ้งเตือน (Android 13+) สำหรับ notification นับถอยหลัง; เปิด Settings ได้จาก Stats
 - `usageStats.ts` — Usage Access + ดึง screen time ผ่าน `AppBlockModule`
 - `faceVerifier.ts` — enroll/verify ใบหน้า (ML Kit + MobileFaceNet TFLite), embedding ใน SecureStore; enroll ต้องใบหน้าใหญ่ (~25% กว้างภาพ), verify เควสยอมเล็กกว่า (~8%) เพื่อเห็นงานบ้านในภาพ
-- `photoFreshness.ts` — ตรวจ EXIF วันที่ถ่าย (เลือกจากคลังต้องเป็นวันนี้); ถ่ายในแอปไม่ต้องเช็ค
-- `choreVerifier.ts` — ตรวจเควส: verifyFace + ML Kit image labeling (log label ใน console/`__DEV__` alert); `expectedLabels` ปรับตาม label จริงที่ ML Kit คืน (เช่น room+chair ไม่ใช่ broom)
+- `choreVerifier.ts` — ตรวจเควสตามลำดับ: verifyFace → เช็ค hash รูปซ้ำ (`isDuplicateHash`, เจอซ้ำ = reject ทันทีไม่ต้องรัน ML Kit) → ML Kit image labeling (log label ใน console/`__DEV__` alert); `expectedLabels` ปรับตาม label จริงที่ ML Kit คืน (เช่น room+chair ไม่ใช่ broom); ผ่านครบถึง `recordHash`
+- `../utils/imageHash.ts` — `hashImageFile(uri)`: อ่านไฟล์ผ่าน `expo-file-system` (base64) แล้ว SHA-1 ผ่าน `expo-crypto`; ใช้เทียบรูปซ้ำเท่านั้น ไม่เก็บ/ไม่อัปโหลดรูป
 - `firebase/` — config, functions (AI tip เท่านั้น)
-- `supabase/` — `client.ts`, `register.ts` (anon auth + RPC), `sync.ts` (focus/daily_usage/chore + offline queue)
+- `supabase/` — `client.ts`, `register.ts` (anon auth + RPC), `sync.ts` (focus/daily_usage/chore + offline queue + `syncNickname`/`fetchClassLeaderboard` แบบ best-effort ไม่ผ่าน queue)
 
 ## Admin Web (`admin-web/`)
 - Next.js App Router + Supabase SSR · deploy บน **Vercel** (Root Directory = `admin-web`)
 - `/login` — admin **username**/password (map ไป auth email ผ่าน RPC `lookup_admin_email`)
 - `/` — dashboard สรุปนักเรียน / focus วันนี้ / screen time
-- `/students`, `/students/[id]` — รายละเอียด focus, screen time 7 วัน, chore
+- `/students`, `/students/[id]` — รายละเอียด focus, screen time 7 วัน, chore; ปุ่ม **พิมพ์/บันทึกสรุป** (`PrintSummaryButton`, `window.print()`, ซ่อนตัวเองใน `print:hidden`); แก้ **ห้องเรียน** ของนักเรียน (`ClassNameEditor`, Server Action `updateClassName` เช็ค `requireAdmin()` เอง ไม่พึ่ง UI gate)
 - ตั้งค่า: ดู [`supabase/README.md`](../supabase/README.md) §7 Vercel; env จาก `.env.local.example`
 
 ## Components สำคัญ
@@ -83,8 +83,9 @@ npm run android        # build dev client ครั้งแรก
 - `OutfitPicker` — ปุ่ม 👗 หน้า Home → เลือกสวม/ถอดเครื่องแต่งกายที่ซื้อแล้ว (หลายชิ้นพร้อมกัน, ทุกสัตว์)
 - `PetSwitcherSidebar` — ปุ่มลอยขวา Home สลับสัตว์; หมาต้องซื้อก่อน
 - `PetNameEditor` — แตะชื่อบน Home → Modal แก้ชื่อ (trim, 1–12 ตัวอักษร) → `setPetName`
-- `ChoreQuestList` — UI เควส + ถ่ายรูป (`CameraCaptureModal`) / เลือกจากคลัง; gate ต้อง enroll ใบหน้าก่อน
+- `ChoreQuestList` — UI เควส + ถ่ายรูป in-app (`CameraCaptureModal`) เท่านั้น (ตัดปุ่มเลือกจากคลังออกแล้ว); gate ต้อง enroll ใบหน้าก่อน
 - `CameraCaptureModal` — กล้อง in-app + preview; ปุ่ม「ตั้งค่า」: กลับด้านภาพ / เสียงชัตเตอร์ (persist `cameraSettingsStore`); `shutterSound: false` + `animateShutter` ตามการตั้งค่า
+- `ClassLeaderboard` (`src/components/stats/`) — อันดับเพื่อนร่วมห้องตามนาทีโฟกัสสัปดาห์นี้ (จ.-อา.), ดึงผ่าน RPC `get_class_leaderboard`; ไม่เห็น `student_id`/uuid ของเพื่อน เห็นแค่ nickname; ว่างถ้ายังไม่ได้ระบุห้องเรียน
 - `IdentityGate` — บังคับเฉพาะ student-register ก่อนเข้าแอป
 
 ## Features สำคัญ + logic
@@ -97,11 +98,14 @@ npm run android        # build dev client ครั้งแรก
 4. **ร้านค้า** — ซื้อด้วยเหรียญ, owned → สวม/วาง/ตั้ง theme
 5. **เสริมแรงเชิงบวก** — fail ไม่ลงโทษ
 6. **ลงทะเบียนใบหน้า** — **ไม่บังคับ** ตอนเปิดแอป; เปิดจากหน้าเควสหรือ Stats; เก็บ embedding ใน SecureStore ไม่เก็บรูป; re-enroll ได้จาก Stats
-7. **เควสทำงานบ้าน** — 4 เควส (`CHORE_QUESTS` ใน `focus.ts`); ถ่าย in-app หรือเลือกรูปจากคลัง → ต้อง enroll ใบหน้าก่อน + ผ่านทั้งใบหน้า + label งานบ้าน; ลองใหม่ได้ไม่จำกัดจนกว่าจะสำเร็จ; รางวัล coins → `petStore.addCoins`
+7. **เควสทำงานบ้าน** — 6 เควส (`CHORE_QUESTS` ใน `focus.ts`, รางวัล 25 ⭐/เควส): กวาดบ้าน/ล้างจาน/จัดโต๊ะเรียน/รีดผ้า/**รดน้ำต้นไม้**/**จัดเตียงนอน**; ถ่าย in-app เท่านั้น (ตัดเลือกจากคลังออกแล้วเพื่อกันโกง) → ต้อง enroll ใบหน้าก่อน + ผ่านทั้งใบหน้า + ไม่ใช่รูปซ้ำ (hash เทียบ 5 รูปล่าสุดต่อเควส) + label งานบ้าน; ลองใหม่ได้ไม่จำกัดจนกว่าจะสำเร็จ; รางวัล coins → `petStore.addCoins`. *2 เควสใหม่ยังไม่ทดสอบ label จริงบนอุปกรณ์ — ต้องเช็คก่อนใช้งานจริง*
 8. **เปลี่ยนชื่อสัตว์เลี้ยง** — แตะชื่อบน Home → modal; บันทึกลง `petStore.name` (persist AsyncStorage)
-9. **สัตว์เลี้ยงหลายตัว** — แมว default (`pet_cat`); แมวส้ม (`pet_orange_cat`, 500 ⭐) · หมา (`pet_dog`); สลับผ่าน sidebar หรือร้านค้า → `setActivePet` sync `species` + Rive file
+9. **สัตว์เลี้ยงหลายตัว** — แมว default (`pet_cat`); แมวส้ม (`pet_orange_cat`, 150 ⭐) · หมา (`pet_dog`, 120 ⭐); สลับผ่าน sidebar หรือร้านค้า → `setActivePet` sync `species` + Rive file
 10. **ลงทะเบียนนักเรียน** — 1 รหัส = 1 เครื่อง; ลบแอปแล้วติดตั้งใหม่ + รหัสเดิม + device เดิม → `register_student` restore session (ไม่ error ซ้ำ)
-11. **Supabase sync** — focus session (complete/fail/cancel), daily screen time, chore completion → Postgres; face embedding **ไม่ sync**
+11. **Supabase sync** — focus session (complete/fail/cancel), daily screen time, chore completion, nickname → Postgres; face embedding **ไม่ sync**
+12. **รางวัลโฟกัส + สตรีค** — `FOCUS_REWARDS` (30/60/120/180/240 นาที = 15/40/100/160/240 ⭐); `STREAK_BONUSES` ให้โบนัสเพิ่มที่สตรีค 1/3/7/14/30 วัน; ขาดสตรีคแล้วกลับมา (สตรีคเดิม ≥3) → เหรียญ 2 เท่าครั้งเดียว ถ้าไม่มี Streak Freeze; มี Freeze token (สูงสุด 3, +1 ทุก 7 วันสตรีค) ใช้อัตโนมัติกันสตรีคขาดถ้ามี
+13. **อันดับห้อง (Class Leaderboard)** — ต้องมีทั้ง `students.class_name` (แอดมินตั้งจาก admin-web) และนักเรียนตั้ง nickname เอง; อันดับตามนาทีโฟกัสสำเร็จของสัปดาห์นี้ (จ.-อา., รีเซตทุกสัปดาห์) ผ่าน RPC `get_class_leaderboard` (SECURITY DEFINER) — ส่ง `student_id` จริงกลับให้เฉพาะแถวตัวเอง ไม่เผยให้เพื่อนเห็น
+14. **ร้านค้า** — ปรับราคาสัตว์เลี้ยง/พื้นหลังลงเพื่อให้เข้าถึงง่ายขึ้น (ดูจุดที่ 9 + `SHOP_ITEMS` ใน `shop.ts`)
 
 ## Troubleshooting
 | อาการ | สาเหตุ | แก้ |
@@ -114,6 +118,8 @@ npm run android        # build dev client ครั้งแรก
 | ค้างหน้า loading | AsyncStorage hydrate ช้า/ล้ม | รอ fallback 1.5s หรือ clear app data |
 
 ## ประวัติการเปลี่ยนแปลงล่าสุด
+- เพิ่มเครื่องแต่งกายใหม่ 15 ชิ้นในร้านค้า (หมวกทรงสูง, เบเร่ต์ 4 สี/ลาย, บักเก็ต, ไหมพรม, มงกุฎดอกไม้, แก๊ปโบว์, หูแมว, แก๊ปปลา, เสื้อกันฝน, ทักซิโด้, เสื้อโค้ท, แว่นทรงกลม, ชุดนักเรียน) — map เข้า Rive input `hat`/`hat2`–`hat10`/`hood`/`suit`/`coat`/`uniform`/`glass2` ที่มี layer พร้อมแล้วใน `pet_cat.riv` (ต้อง export `.riv` ทับไฟล์จริงเอง เพราะ MCP export ถูก gate ด้วยแพลน Rive); ยังไม่เช็ค/ทำ `pet_dog_and_cat.riv` ให้ตรงกัน
+- เพิ่มโบนัสเหรียญ Focus/Streak (`STREAK_BONUSES`), catch-up 2 เท่าเมื่อขาดสตรีคแล้วกลับมา, Streak Freeze กันสตรีคขาดล่วงหน้า; ปรับราคาร้านค้าลง; เพิ่มเควสทำงานบ้าน 2 อัน (รดน้ำต้นไม้/จัดเตียง) + บวกรางวัลเควสเดิมเป็น 25 ⭐; ตัดปุ่มเลือกรูปจากคลังในเควส (บังคับกล้อง in-app) + เพิ่มเช็ค hash รูปซ้ำ (anti-cheat, on-device only); เพิ่มปุ่มพิมพ์สรุปนักเรียนใน admin-web; เพิ่มอันดับห้อง (Class Leaderboard) — ต้อง apply migration `supabase/migrations/20260827000000_class_leaderboard.sql` (เพิ่ม `class_name`/`nickname` + RPC `get_class_leaderboard`) ผ่าน Change Management ก่อนใช้งานจริง เพราะยังไม่ได้ push ขึ้น production
 - Supabase: ลงทะเบียนรหัสนักเรียน + sync usage + admin-web dashboard
 - เพิ่ม Focus Foreground Service: ขอสิทธิ์แจ้งเตือน + notification นับถอยหลังขณะโฟกัสเบื้องหลัง (`FocusForegroundService.kt`)
 - เพิ่มสุนัข (`pet_dog_and_cat.riv`) + sidebar สลับสัตว์ + ซื้อหมาในร้าน (persist ownedItems/activePetId)

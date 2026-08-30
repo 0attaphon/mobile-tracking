@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Alert, Platform } from 'react-native'
 import { useFocusStore, getCoinsForDuration } from '@/stores/focusStore'
 import { usePetStore } from '@/stores/petStore'
@@ -60,6 +60,13 @@ export function useFocusSession() {
   // path (native complete event, native tick, or JS-fallback tick) reaches 0.
   const settledRef = useRef(false)
 
+  const [lastReward, setLastReward] = useState<{
+    coins: number
+    streakBonus: number
+    catchUpApplied: boolean
+    usedFreeze: boolean
+  } | null>(null)
+
   useEffect(() => {
     if (status !== 'in_progress') return
     settledRef.current = false
@@ -97,11 +104,14 @@ export function useFocusSession() {
     if (s !== 'in_progress' && s !== 'completed') return
     settledRef.current = true
     stopFocusTimer().catch(() => { })
-    const coins = getCoinsForDuration(selectedMinutes)
+    const usedFreeze = useFocusStore.getState().streakFrozenPending
+    const { streakBonus, catchUpApplied } = completeSession()
+    const baseCoins = getCoinsForDuration(selectedMinutes)
+    const coins = baseCoins * (catchUpApplied ? 2 : 1) + streakBonus
     addCoins(coins)
     addExp(coins * 2)
     updateHappiness(10)
-    completeSession()
+    setLastReward({ coins, streakBonus, catchUpApplied, usedFreeze })
     syncFocusSession({
       durationMinutes: selectedMinutes,
       status: 'completed',
@@ -162,5 +172,6 @@ export function useFocusSession() {
     cancel,
     reset: resetSession,
     selectDuration,
+    lastReward,
   }
 }

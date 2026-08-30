@@ -13,6 +13,7 @@ interface UserProfile {
 interface UserState {
   profile: UserProfile | null
   studentId: string | null
+  nickname: string | null
   isRegistered: boolean
   isLoggedIn: boolean
   isLoading: boolean
@@ -21,6 +22,7 @@ interface UserState {
   _hasHydrated: boolean
   setProfile: (profile: UserProfile) => void
   setRegistered: (studentId: string) => void
+  setNickname: (nickname: string | null) => void
   setLoggedIn: (value: boolean) => void
   setLoading: (value: boolean) => void
   setHasHydrated: (value: boolean) => void
@@ -34,6 +36,7 @@ export const useUserStore = create<UserState>()(
     (set) => ({
       profile: null,
       studentId: null,
+      nickname: null,
       isRegistered: false,
       isLoggedIn: false,
       isLoading: false,
@@ -44,6 +47,7 @@ export const useUserStore = create<UserState>()(
       setProfile: (profile) => set({ profile }),
       setRegistered: (studentId) =>
         set({ studentId, isRegistered: true, isLoggedIn: true }),
+      setNickname: (nickname) => set({ nickname }),
       setLoggedIn: (value) => set({ isLoggedIn: value }),
       setLoading: (value) => set({ isLoading: value }),
       setHasHydrated: (value) => set({ _hasHydrated: value }),
@@ -78,6 +82,7 @@ export const useUserStore = create<UserState>()(
       partialize: (state) => ({
         ownedItems: state.ownedItems,
         studentId: state.studentId,
+        nickname: state.nickname,
         isRegistered: state.isRegistered,
       }),
       onRehydrateStorage: () => (state) => {

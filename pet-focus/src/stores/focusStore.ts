@@ -1,7 +1,7 @@
 import { create } from 'zustand'
 import { persist, createJSONStorage } from 'zustand/middleware'
 import AsyncStorage from '@react-native-async-storage/async-storage'
-import { FocusSessionStatus, FOCUS_REWARDS, MoodValue, MoodEntry } from '@/types/focus'
+import { FocusSessionStatus, FOCUS_REWARDS, STREAK_BONUSES, MoodValue, MoodEntry } from '@/types/focus'
 import { todayKey } from '@/utils/imageTensor'
 
 function dayKeyOffset(days: number): string {
@@ -21,6 +21,9 @@ interface FocusState {
   longestStreak: number
   totalFocusMinutes: number
   moodLog: MoodEntry[]
+  catchUpAvailable: boolean
+  freezeTokens: number
+  streakFrozenPending: boolean
   // Actions
   selectDuration: (minutes: number) => void
   startSession: () => void
@@ -28,7 +31,7 @@ interface FocusState {
   tickSecond: () => void
   pauseSession: () => void
   resumeSession: () => void
-  completeSession: () => void
+  completeSession: () => { streakBonus: number; catchUpApplied: boolean }
   failSession: () => void
   resetSession: () => void
   logMood: (mood: MoodValue, minutes: number) => void
@@ -36,7 +39,7 @@ interface FocusState {
 
 export const useFocusStore = create<FocusState>()(
   persist(
-    (set) => ({
+    (set, get) => ({
       status: 'idle',
       isPaused: false,
       selectedMinutes: 30,
@@ -47,17 +50,40 @@ export const useFocusStore = create<FocusState>()(
       longestStreak: 0,
       totalFocusMinutes: 0,
       moodLog: [],
+      catchUpAvailable: false,
+      freezeTokens: 0,
+      streakFrozenPending: false,
 
       selectDuration: (minutes) =>
         set({ selectedMinutes: minutes, remainingSeconds: minutes * 60 }),
 
       startSession: () =>
-        set((state) => ({
-          status: 'in_progress',
-          isPaused: false,
-          sessionStartTime: new Date(),
-          remainingSeconds: state.selectedMinutes * 60,
-        })),
+        set((state) => {
+          const lapsedFromStreak =
+            !!state.lastFocusDate &&
+            state.lastFocusDate !== todayKey() &&
+            state.lastFocusDate !== dayKeyOffset(-1) &&
+            state.currentStreak >= 3
+
+          if (lapsedFromStreak && state.freezeTokens > 0) {
+            return {
+              status: 'in_progress',
+              isPaused: false,
+              sessionStartTime: new Date(),
+              remainingSeconds: state.selectedMinutes * 60,
+              freezeTokens: state.freezeTokens - 1,
+              streakFrozenPending: true,
+            }
+          }
+
+          return {
+            status: 'in_progress',
+            isPaused: false,
+            sessionStartTime: new Date(),
+            remainingSeconds: state.selectedMinutes * 60,
+            ...(lapsedFromStreak ? { catchUpAvailable: true } : {}),
+          }
+        }),
 
       syncRemainingSeconds: (seconds) =>
         set((state) => {
@@ -86,29 +112,42 @@ export const useFocusStore = create<FocusState>()(
           return { isPaused: false }
         }),
 
-      completeSession: () =>
-        set((state) => {
-          if (state.status !== 'in_progress' && state.status !== 'completed') return state
+      completeSession: () => {
+        const state = get()
+        if (state.status !== 'in_progress') return { streakBonus: 0, catchUpApplied: false }
 
-          const today = todayKey()
-          let currentStreak = state.currentStreak
-          let longestStreak = state.longestStreak
-          let lastFocusDate = state.lastFocusDate
-          if (state.lastFocusDate !== today) {
-            currentStreak = state.lastFocusDate === dayKeyOffset(-1) ? state.currentStreak + 1 : 1
-            longestStreak = Math.max(state.longestStreak, currentStreak)
-            lastFocusDate = today
+        const today = todayKey()
+        let currentStreak = state.currentStreak
+        let longestStreak = state.longestStreak
+        let lastFocusDate = state.lastFocusDate
+        let freezeTokens = state.freezeTokens
+        if (state.lastFocusDate !== today) {
+          const continuous = state.lastFocusDate === dayKeyOffset(-1) || state.streakFrozenPending
+          currentStreak = continuous ? state.currentStreak + 1 : 1
+          longestStreak = Math.max(state.longestStreak, currentStreak)
+          lastFocusDate = today
+          if (currentStreak % 7 === 0) {
+            freezeTokens = Math.min(3, freezeTokens + 1)
           }
+        }
 
-          return {
-            status: 'completed',
-            isPaused: false,
-            totalFocusMinutes: state.totalFocusMinutes + state.selectedMinutes,
-            currentStreak,
-            longestStreak,
-            lastFocusDate,
-          }
-        }),
+        const catchUpApplied = state.catchUpAvailable
+        const streakBonus = STREAK_BONUSES[currentStreak] ?? 0
+
+        set({
+          status: 'completed',
+          isPaused: false,
+          totalFocusMinutes: state.totalFocusMinutes + state.selectedMinutes,
+          currentStreak,
+          longestStreak,
+          lastFocusDate,
+          catchUpAvailable: false,
+          streakFrozenPending: false,
+          freezeTokens,
+        })
+
+        return { streakBonus, catchUpApplied }
+      },
 
       failSession: () =>
         set((state) => {
@@ -141,6 +180,9 @@ export const useFocusStore = create<FocusState>()(
         longestStreak: state.longestStreak,
         totalFocusMinutes: state.totalFocusMinutes,
         moodLog: state.moodLog,
+        catchUpAvailable: state.catchUpAvailable,
+        freezeTokens: state.freezeTokens,
+        streakFrozenPending: state.streakFrozenPending,
       }),
     }
   )

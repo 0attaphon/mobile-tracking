@@ -52,7 +52,7 @@ export function IdentityGate({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (!hasHydrated || !navigationReady) return
 
-    const onStudentRegister = segments[1] === 'student-register'
+    const onStudentRegister = segments.at(1) === 'student-register'
 
     if (!isRegistered && !onStudentRegister) {
       router.replace('/onboarding/student-register')

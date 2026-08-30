@@ -1,6 +1,8 @@
 import Link from 'next/link'
 import { AdminNav } from '@/components/AdminNav'
 import { AppUsageList } from '@/components/AppUsageList'
+import { ClassNameEditor } from '@/components/ClassNameEditor'
+import { PrintSummaryButton } from '@/components/PrintSummaryButton'
 import { requireAdmin } from '@/lib/supabase/server'
 import { resolveChoreQuestLabel } from '@shared/choreQuestLabels'
 
@@ -45,7 +47,9 @@ export default async function StudentDetailPage({
   if (!student) {
     return (
       <>
-        <AdminNav />
+        <div className="print:hidden">
+          <AdminNav />
+        </div>
         <main className="max-w-5xl mx-auto px-6 py-8">
           <p>ไม่พบนักเรียน</p>
           <Link href="/students" className="text-emerald-400 text-sm">
@@ -63,16 +67,24 @@ export default async function StudentDetailPage({
 
   return (
     <>
-      <AdminNav />
+      <div className="print:hidden">
+        <AdminNav />
+      </div>
       <main className="max-w-5xl mx-auto px-6 py-8 space-y-8">
         <div>
-          <Link href="/students" className="text-emerald-400 text-sm hover:underline">
-            ← กลับ
-          </Link>
+          <div className="flex items-center justify-between">
+            <Link href="/students" className="text-emerald-400 text-sm hover:underline print:hidden">
+              ← กลับ
+            </Link>
+            <PrintSummaryButton />
+          </div>
           <h1 className="text-2xl font-bold mt-2">รหัส {student.student_id}</h1>
           <p className="text-slate-400 text-sm">
             ลงทะเบียน {new Date(student.created_at).toLocaleString('th-TH')}
           </p>
+          <div className="mt-3">
+            <ClassNameEditor studentId={student.id} initialClassName={student.class_name} />
+          </div>
         </div>
 
         <section>

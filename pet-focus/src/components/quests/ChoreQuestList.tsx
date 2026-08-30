@@ -7,13 +7,11 @@ import {
   Alert,
   ScrollView,
 } from 'react-native'
-import * as ImagePicker from 'expo-image-picker'
 import { useRouter } from 'expo-router'
 import { CHORE_QUESTS } from '@/types/focus'
 import { useChoreQuestStore } from '@/stores/choreQuestStore'
 import { useIdentityStore } from '@/stores/identityStore'
 import { verifyChorePhoto } from '@/services/choreVerifier'
-import { verifyPhotoTakenToday } from '@/services/photoFreshness'
 import { useAppTheme } from '@/hooks/useAppTheme'
 import { CameraCaptureModal } from '@/components/camera/CameraCaptureModal'
 
@@ -86,43 +84,13 @@ export function ChoreQuestList() {
     setCameraQuestId(questId)
   }
 
-  async function handlePickPhoto(questId: string) {
-    if (!beginSubmit(questId)) return
-
-    const permission = await ImagePicker.requestMediaLibraryPermissionsAsync()
-    if (!permission.granted) {
-      Alert.alert('ต้องเข้าถึงคลังรูป', 'อนุญาตคลังรูปเพื่อเลือกรูปยืนยันเควส')
-      return
-    }
-
-    const photo = await ImagePicker.launchImageLibraryAsync({
-      mediaTypes: ['images'],
-      allowsEditing: false,
-      quality: 0.85,
-      exif: true,
-    })
-
-    if (photo.canceled || !photo.assets[0]?.uri) {
-      return
-    }
-
-    const asset = photo.assets[0]
-    const freshness = verifyPhotoTakenToday(asset.exif ?? null)
-    if (!freshness.ok) {
-      Alert.alert('รูปไม่ตรงเงื่อนไข', freshness.reason)
-      return
-    }
-
-    await submitQuestPhoto(questId, asset.uri)
-  }
-
   const activeCameraQuest = CHORE_QUESTS.find((q) => q.id === cameraQuestId)
 
   return (
     <>
       <ScrollView className="flex-1" contentContainerStyle={{ paddingBottom: 32 }}>
         <Text className="text-white/60 text-sm mb-3 px-1">
-          ถ่ายหรือเลือกรูปที่ถ่ายวันนี้ มีทั้งใบหน้าและงาน — รูปจะไม่ถูกเก็บ วิเคราะห์บนเครื่องแล้วทิ้ง
+          ถ่ายรูปให้เห็นทั้งใบหน้าและงานที่ทำ — รูปจะไม่ถูกเก็บ วิเคราะห์บนเครื่องแล้วทิ้ง
         </Text>
 
         {CHORE_QUESTS.map((quest) => {
@@ -151,30 +119,19 @@ export function ChoreQuestList() {
                   {progress.lastResult && !progress.lastResult.matched && (
                     <Text className="text-red-300 text-xs mb-2">{progress.lastResult.reason}</Text>
                   )}
-                  <View className="flex-row gap-2">
-                    <TouchableOpacity
-                      onPress={() => handleTakePhoto(quest.id)}
-                      disabled={loading}
-                      className={`flex-1 rounded-xl py-3 items-center ${
-                        loading ? 'bg-white/10' : 'bg-accent'
-                      }`}
-                    >
-                      {loading ? (
-                        <ActivityIndicator color="#0F2820" />
-                      ) : (
-                        <Text className="text-background font-bold text-sm">ถ่ายรูป</Text>
-                      )}
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      onPress={() => handlePickPhoto(quest.id)}
-                      disabled={loading}
-                      className={`flex-1 rounded-xl py-3 items-center border ${
-                        loading ? 'border-white/10 bg-white/5' : 'border-white/20 bg-white/10'
-                      }`}
-                    >
-                      <Text className="text-white font-bold text-sm">เลือกรูป</Text>
-                    </TouchableOpacity>
-                  </View>
+                  <TouchableOpacity
+                    onPress={() => handleTakePhoto(quest.id)}
+                    disabled={loading}
+                    className={`rounded-xl py-3 items-center ${
+                      loading ? 'bg-white/10' : 'bg-accent'
+                    }`}
+                  >
+                    {loading ? (
+                      <ActivityIndicator color="#0F2820" />
+                    ) : (
+                      <Text className="text-background font-bold text-sm">ถ่ายรูป</Text>
+                    )}
+                  </TouchableOpacity>
                 </>
               )}
             </View>
