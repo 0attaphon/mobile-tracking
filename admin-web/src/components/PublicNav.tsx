@@ -4,7 +4,7 @@ export function PublicNav() {
   return (
     <nav className="border-b border-slate-800 bg-slate-900/80 px-6 py-4 flex items-center gap-6">
       <Link href="/" className="font-bold text-emerald-400">
-        Pet Focus
+        FOCUS GROUP
       </Link>
       <Link href="/" className="text-slate-300 hover:text-white text-sm">
         หน้าแรก

@@ -1,12 +1,12 @@
 {
   "expo": {
-    "name": "PET FOCUS",
-    "slug": "pet-focus",
+    "name": "FOCUS GROUP",
+    "slug": "focus-group",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon_pet.png",
     "userInterfaceStyle": "dark",
-    "scheme": "petfocus",
+    "scheme": "focusgroup",
     "splash": {
       "image": "./assets/pet_loading.png",
       "resizeMode": "contain",
@@ -49,7 +49,7 @@
       [
         "expo-camera",
         {
-          "cameraPermission": "Allow Pet Focus to use the camera for face enrollment and chore verification."
+          "cameraPermission": "Allow Focus Group to use the camera for face enrollment and chore verification."
         }
       ],
       [

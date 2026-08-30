@@ -6,7 +6,7 @@ Read the exact versioned docs at https://docs.expo.dev/versions/v56.0.0/ before 
 
 ---
 
-# Pet Focus — ภาพรวมโปรเจกต์
+# Focus Group — ภาพรวมโปรเจกต์
 
 แอปช่วยลดเวลาใช้มือถือสำหรับนักเรียน โดยใช้สัตว์เลี้ยงเสมือนเป็นแรงจูงใจ (เสริมแรงเชิงบวก) ทำ Focus session → สัตว์เลี้ยงมีความสุข + ได้เหรียญ/EXP ไปแต่งตัว/ตกแต่งห้อง
 
@@ -116,8 +116,10 @@ npm run android        # build dev client ครั้งแรก
 | Timer ไม่เดินตอนปิดแอป | dev client เก่า / ไม่มี FGS | `npx expo prebuild --clean && npx expo run:android` + อนุญาต Notifications |
 
 | ค้างหน้า loading | AsyncStorage hydrate ช้า/ล้ม | รอ fallback 1.5s หรือ clear app data |
+| แอพเด้ง (SIGABRT) ตอนเปิดหมา/แมวส้ม | `pet_dog_and_cat.riv` ไม่มี input `coat`/`glass2`/`uniform` บน State Machine 1 แต่ `PetRive` ยิง `setInputState` ทุก outfit input แบบไม่กรอง — native throw `StateMachineInputException` ข้าม JNI boundary จับด้วย JS try/catch ไม่ได้ | กรองด้วย `RIVE_SOURCE_SUPPORTED_OUTFIT_INPUTS` (`types/pet.ts`) ก่อน `setInputState` ใน `PetRive.tsx`; ของถาวรคือเพิ่ม layer+input ที่ขาดใน `pet_dog_and_cat.riv` แล้วเอาออกจาก allowlist |
 
 ## ประวัติการเปลี่ยนแปลงล่าสุด
+- Fix แอพเด้งตอนเปิด `pet_dog_and_cat.riv`: เพิ่ม allowlist `RIVE_SOURCE_SUPPORTED_OUTFIT_INPUTS` กรอง outfit input ที่ยังไม่มีในไฟล์ (`coat`/`glass2`/`uniform`) ก่อนยิง `setInputState` — ไฟล์นี้ยังขาด layer/input พวกนี้ ต้องเพิ่มใน Rive editor แล้วลบออกจาก allowlist ทีหลัง
 - เพิ่มเครื่องแต่งกายใหม่ 15 ชิ้นในร้านค้า (หมวกทรงสูง, เบเร่ต์ 4 สี/ลาย, บักเก็ต, ไหมพรม, มงกุฎดอกไม้, แก๊ปโบว์, หูแมว, แก๊ปปลา, เสื้อกันฝน, ทักซิโด้, เสื้อโค้ท, แว่นทรงกลม, ชุดนักเรียน) — map เข้า Rive input `hat`/`hat2`–`hat10`/`hood`/`suit`/`coat`/`uniform`/`glass2` ที่มี layer พร้อมแล้วใน `pet_cat.riv` (ต้อง export `.riv` ทับไฟล์จริงเอง เพราะ MCP export ถูก gate ด้วยแพลน Rive); ยังไม่เช็ค/ทำ `pet_dog_and_cat.riv` ให้ตรงกัน
 - เพิ่มโบนัสเหรียญ Focus/Streak (`STREAK_BONUSES`), catch-up 2 เท่าเมื่อขาดสตรีคแล้วกลับมา, Streak Freeze กันสตรีคขาดล่วงหน้า; ปรับราคาร้านค้าลง; เพิ่มเควสทำงานบ้าน 2 อัน (รดน้ำต้นไม้/จัดเตียง) + บวกรางวัลเควสเดิมเป็น 25 ⭐; ตัดปุ่มเลือกรูปจากคลังในเควส (บังคับกล้อง in-app) + เพิ่มเช็ค hash รูปซ้ำ (anti-cheat, on-device only); เพิ่มปุ่มพิมพ์สรุปนักเรียนใน admin-web; เพิ่มอันดับห้อง (Class Leaderboard) — ต้อง apply migration `supabase/migrations/20260827000000_class_leaderboard.sql` (เพิ่ม `class_name`/`nickname` + RPC `get_class_leaderboard`) ผ่าน Change Management ก่อนใช้งานจริง เพราะยังไม่ได้ push ขึ้น production
 - Supabase: ลงทะเบียนรหัสนักเรียน + sync usage + admin-web dashboard

@@ -1,8 +1,8 @@
-# Pet Focus App — Cursor AI Prompt
+# Focus Group App — Cursor AI Prompt
 
 ## Project Overview
 
-Build a React Native mobile app called **"Pet Focus"** — a gamified screen time reduction app for middle school students. The core concept: **the less you use your phone, the happier your virtual pet grows.**
+Build a React Native mobile app called **"Focus Group"** — a gamified screen time reduction app for middle school students. The core concept: **the less you use your phone, the happier your virtual pet grows.**
 
 ---
 

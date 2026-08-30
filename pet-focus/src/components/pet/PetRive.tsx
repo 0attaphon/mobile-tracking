@@ -1,6 +1,6 @@
 import React, { useCallback, useEffect, useRef } from 'react'
 import { View, NativeModules } from 'react-native'
-import { PetId, getPetCatalogEntry } from '@/types/pet'
+import { PetId, getPetCatalogEntry, RIVE_SOURCE_SUPPORTED_OUTFIT_INPUTS } from '@/types/pet'
 import { getOutfitRiveInputs } from '@/types/shop'
 import { PET_CAT_RIV, PET_DOG_AND_CAT_RIV } from '@/assets/riveAssets'
 
@@ -41,7 +41,9 @@ function applyRiveInputs(
     }
 
     const outfitInputs = getOutfitRiveInputs(equippedItems)
+    const supportedInputs = RIVE_SOURCE_SUPPORTED_OUTFIT_INPUTS[entry.riveSource]
     for (const [inputName, value] of Object.entries(outfitInputs)) {
+      if (supportedInputs && !supportedInputs.includes(inputName)) continue
       ref.current.setInputState(stateMachineName, inputName, value)
     }
   } catch {

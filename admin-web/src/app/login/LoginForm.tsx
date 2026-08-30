@@ -20,7 +20,7 @@ export default function LoginForm() {
         action={formAction}
         className="w-full max-w-md bg-slate-900 border border-slate-800 rounded-2xl p-8"
       >
-        <h1 className="text-2xl font-bold mb-2">Pet Focus Admin</h1>
+        <h1 className="text-2xl font-bold mb-2">Focus Group Admin</h1>
         <p className="text-slate-400 text-sm mb-6">เข้าสู่ระบบสำหรับผู้ดูแล</p>
 
         <label className="block text-sm text-slate-300 mb-1">ชื่อผู้ใช้</label>

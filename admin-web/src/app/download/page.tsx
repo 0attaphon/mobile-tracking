@@ -7,7 +7,7 @@ export default function DownloadPage() {
     <>
       <PublicNav />
       <main className="max-w-2xl mx-auto px-6 py-16">
-        <h1 className="text-3xl font-bold mb-2">ดาวน์โหลด Pet Focus</h1>
+        <h1 className="text-3xl font-bold mb-2">ดาวน์โหลด Focus Group</h1>
         <p className="text-slate-400 mb-8">ติดตั้งแอปบน Android เพื่อเริ่มใช้งาน</p>
 
         {apkUrl ? (
@@ -32,7 +32,7 @@ export default function DownloadPage() {
               ถ้าระบบถาม ให้อนุญาต <span className="text-slate-300">Install unknown apps</span>{' '}
               สำหรับเบราว์เซอร์หรือ File Manager ที่ใช้เปิดไฟล์
             </li>
-            <li>ติดตั้งแอปแล้วเปิด Pet Focus</li>
+            <li>ติดตั้งแอปแล้วเปิด Focus Group</li>
             <li>ลงทะเบียนด้วยรหัสนักเรียนที่ได้รับจากโรงเรียน (1 รหัส = 1 เครื่อง)</li>
           </ol>
         </div>

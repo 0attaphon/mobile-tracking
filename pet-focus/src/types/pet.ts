@@ -28,6 +28,18 @@ export function getPetCatalogEntry(petId: PetId): PetCatalogEntry {
   return PET_CATALOG.find((p) => p.id === petId) ?? PET_CATALOG[0]
 }
 
+/**
+ * Outfit rive inputs confirmed present on each riveSource's State Machine 1.
+ * omit riveSource here to apply ALL outfit inputs unfiltered; list explicitly to restrict.
+ */
+export const RIVE_SOURCE_SUPPORTED_OUTFIT_INPUTS: Partial<Record<PetRiveSource, string[]>> = {
+  pet_dog_and_cat: [
+    'straw_hat', 'wizard_hat', 'sunglass',
+    'hat', 'hat2', 'hat3', 'hat4', 'hat5', 'hat6', 'hat7', 'hat8', 'hat9', 'hat10',
+    'hood', 'suit', 'uniform', 'coat',
+  ],
+}
+
 export function isPetOwned(petId: PetId, ownedItems: string[]): boolean {
   const entry = getPetCatalogEntry(petId)
   if (!entry.requiresPurchase) return true
