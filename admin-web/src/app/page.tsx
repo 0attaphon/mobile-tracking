@@ -26,7 +26,7 @@ export default function LandingPage() {
       <PublicNav />
       <main>
         <section className="max-w-5xl mx-auto px-6 py-16 text-center">
-          <h1 className="text-4xl sm:text-5xl font-bold mb-4">Focus Group</h1>
+          <h1 className="text-4xl sm:text-5xl font-bold mb-4">BUDDY RISE</h1>
           <p className="text-lg text-slate-400 max-w-2xl mx-auto mb-8">
             แอปช่วยลดเวลาใช้มือถือสำหรับนักเรียน ด้วยสัตว์เลี้ยงเสมือนเป็นแรงจูงใจ
             โฟกัสให้สำเร็จ สัตว์เลี้ยงมีความสุข ได้เหรียญไปแต่งตัวและตกแต่งห้อง

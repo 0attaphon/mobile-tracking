@@ -1,6 +1,7 @@
 import React from 'react'
 import { View, Text, TouchableOpacity } from 'react-native'
 import { MOOD_OPTIONS, MoodValue } from '@/types/focus'
+import { EmojiIcon } from '@/components/EmojiIcon'
 
 interface MoodCheckInProps {
   onSelect: (mood: MoodValue) => void
@@ -23,7 +24,7 @@ export function MoodCheckIn({ onSelect, onSkip }: MoodCheckInProps) {
             activeOpacity={0.7}
             className="flex-1 items-center py-3 rounded-2xl bg-white/5 border border-white/10"
           >
-            <Text className="text-3xl">{opt.emoji}</Text>
+            <EmojiIcon char={opt.emoji} size={32} />
             <Text className="text-text-secondary text-[10px] mt-1">{opt.label}</Text>
           </TouchableOpacity>
         ))}

@@ -5,7 +5,6 @@ import { ShopItem } from '@/types/shop'
 
 const DEFAULTS = {
   bgColor: '#FFFFFF',
-  tabBarColor: '#1A3D2E',
   surfaceColor: '#1A3D2E',
 }
 
@@ -13,7 +12,6 @@ interface RoomState {
   selectedBgId: string | null
   selectedBgColor: string
   selectedBgGradient: [string, string] | null
-  tabBarColor: string
   surfaceColor: string
   placedDecorations: string[]
   setBackground: (item: ShopItem | null) => void
@@ -27,7 +25,6 @@ export const useRoomStore = create<RoomState>()(
       selectedBgId: null,
       selectedBgColor: DEFAULTS.bgColor,
       selectedBgGradient: null,
-      tabBarColor: DEFAULTS.tabBarColor,
       surfaceColor: DEFAULTS.surfaceColor,
       placedDecorations: [],
 
@@ -37,7 +34,6 @@ export const useRoomStore = create<RoomState>()(
             selectedBgId: null,
             selectedBgColor: DEFAULTS.bgColor,
             selectedBgGradient: null,
-            tabBarColor: DEFAULTS.tabBarColor,
             surfaceColor: DEFAULTS.surfaceColor,
           })
           return
@@ -46,8 +42,7 @@ export const useRoomStore = create<RoomState>()(
           selectedBgId: item.id,
           selectedBgColor: item.bgColor ?? DEFAULTS.bgColor,
           selectedBgGradient: item.bgGradient ?? null,
-          tabBarColor: item.tabBarColor ?? DEFAULTS.tabBarColor,
-          surfaceColor: item.surfaceColor ?? item.tabBarColor ?? DEFAULTS.surfaceColor,
+          surfaceColor: item.surfaceColor ?? DEFAULTS.surfaceColor,
         })
       },
 
@@ -63,7 +58,6 @@ export const useRoomStore = create<RoomState>()(
           selectedBgId: null,
           selectedBgColor: DEFAULTS.bgColor,
           selectedBgGradient: null,
-          tabBarColor: DEFAULTS.tabBarColor,
           surfaceColor: DEFAULTS.surfaceColor,
         }),
     }),
@@ -74,7 +68,6 @@ export const useRoomStore = create<RoomState>()(
         selectedBgId: state.selectedBgId,
         selectedBgColor: state.selectedBgColor,
         selectedBgGradient: state.selectedBgGradient,
-        tabBarColor: state.tabBarColor,
         surfaceColor: state.surfaceColor,
         placedDecorations: state.placedDecorations,
       }),

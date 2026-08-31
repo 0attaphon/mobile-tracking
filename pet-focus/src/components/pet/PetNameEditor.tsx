@@ -8,6 +8,7 @@ import {
   Alert,
 } from 'react-native'
 import { useAppTheme } from '@/hooks/useAppTheme'
+import { EmojiIcon } from '@/components/EmojiIcon'
 
 const MAX_NAME_LENGTH = 12
 
@@ -56,7 +57,7 @@ export function PetNameEditor({ name, textColor, onRename }: PetNameEditorProps)
         <Text style={{ color: textColor }} className="text-xl font-bold">
           {name}
         </Text>
-        <Text className="text-sm opacity-60">✏️</Text>
+        <EmojiIcon name="pencil" size={14} style={{ opacity: 0.6 }} />
       </TouchableOpacity>
 
       <Modal visible={visible} transparent animationType="slide">

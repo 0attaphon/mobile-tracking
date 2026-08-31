@@ -1,6 +1,7 @@
 import React from 'react'
 import { View, Text, TouchableOpacity, Image } from 'react-native'
 import { ShopItem } from '@/types/shop'
+import { EmojiIcon } from '@/components/EmojiIcon'
 
 interface ItemCardProps {
   item: ShopItem
@@ -25,7 +26,9 @@ export function ItemCard({ item, isOwned, isEquipped, onPress }: ItemCardProps) 
           resizeMode="contain"
         />
       ) : (
-        <Text className="text-4xl text-center my-2">{item.emoji}</Text>
+        <View className="items-center my-2">
+          <EmojiIcon char={item.emoji} size={40} />
+        </View>
       )}
       <Text className="text-white text-xs font-semibold text-center" numberOfLines={1}>
         {item.name}
@@ -40,7 +43,7 @@ export function ItemCard({ item, isOwned, isEquipped, onPress }: ItemCardProps) 
           </View>
         ) : (
           <View className="flex-row items-center gap-1">
-            <Text className="text-base">⭐</Text>
+            <EmojiIcon name="star" size={16} />
             <Text className="text-white text-xs font-bold">{item.price}</Text>
           </View>
         )}

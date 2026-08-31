@@ -1,6 +1,7 @@
 import React from 'react'
 import { View, Text } from 'react-native'
 import { DEFAULT_BLOCKED_APPS } from '@/types/focus'
+import { EmojiIcon } from '@/components/EmojiIcon'
 
 export function BlockedAppsList() {
   return (
@@ -12,9 +13,9 @@ export function BlockedAppsList() {
             key={app.packageName}
             className="flex-row items-center gap-1 bg-danger/15 border border-danger/30 rounded-full px-3 py-1"
           >
-            <Text className="text-sm">{app.emoji}</Text>
+            <EmojiIcon char={app.emoji} size={14} />
             <Text className="text-white/80 text-xs">{app.name}</Text>
-            <Text className="text-danger text-xs">❌</Text>
+            <EmojiIcon name="cross_mark" size={12} />
           </View>
         ))}
       </View>

@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react'
 import { View, Text, TouchableOpacity, Modal, Alert, Image } from 'react-native'
 import { ThemedScreen } from '@/components/ThemedScreen'
 import { useAppTheme } from '@/hooks/useAppTheme'
+import { EmojiIcon } from '@/components/EmojiIcon'
 import { ItemGrid } from '@/components/shop/ItemGrid'
 import { useShopStore } from '@/stores/shopStore'
 import { usePetStore } from '@/stores/petStore'
@@ -24,7 +25,7 @@ export default function ShopScreen() {
   const petHydrated = usePetStore((s) => s._hasHydrated)
   const storageReady = userHydrated && petHydrated
   const { setBackground, toggleDecoration, selectedBgId, placedDecorations } = useRoomStore()
-  const { surface } = useAppTheme()
+  const { surface, text } = useAppTheme()
   const [selectedItem, setSelectedItem] = useState<ShopItem | null>(null)
 
   useEffect(() => {
@@ -116,9 +117,9 @@ export default function ShopScreen() {
       <View className="flex-1 px-4">
         {/* Header */}
         <View className="flex-row items-center justify-between pt-2 pb-3">
-          <Text className="text-white text-2xl font-bold">ร้านค้า 🛍️</Text>
+          <Text style={{ color: text }} className="text-2xl font-bold">ร้านค้า 🛍️</Text>
           <View style={{ backgroundColor: surface }} className="flex-row items-center gap-1 px-3 py-1.5 rounded-full">
-            <Text>⭐</Text>
+            <EmojiIcon name="star" size={16} />
             <Text className="text-yellow font-bold text-sm">{coins}</Text>
           </View>
         </View>
@@ -132,7 +133,7 @@ export default function ShopScreen() {
               className={`flex-1 py-2 rounded-xl items-center flex-row justify-center gap-1 ${activeCategory === tab.key ? 'bg-primary' : ''
                 }`}
             >
-              <Text className="text-sm">{tab.emoji}</Text>
+              <EmojiIcon char={tab.emoji} size={14} />
               <Text
                 className={`text-xs font-semibold ${activeCategory === tab.key ? 'text-white' : 'text-text-secondary'
                   }`}
@@ -162,7 +163,7 @@ export default function ShopScreen() {
                 <View className="items-center mb-4">
                   {selectedItem.bgColor ? (
                     <View style={{ backgroundColor: selectedItem.bgColor, width: 80, height: 80, borderRadius: 16, marginBottom: 8, alignItems: 'center', justifyContent: 'center' }}>
-                      <Text className="text-4xl">{selectedItem.emoji}</Text>
+                      <EmojiIcon char={selectedItem.emoji} size={40} />
                     </View>
                   ) : selectedItem.image ? (
                     <Image
@@ -171,7 +172,7 @@ export default function ShopScreen() {
                       resizeMode="contain"
                     />
                   ) : (
-                    <Text className="text-6xl mb-2">{selectedItem.emoji}</Text>
+                    <EmojiIcon char={selectedItem.emoji} size={64} style={{ marginBottom: 8 }} />
                   )}
                   <Text className="text-white text-lg font-bold">{selectedItem.name}</Text>
                   <Text className="text-text-secondary text-sm mt-2 text-center">

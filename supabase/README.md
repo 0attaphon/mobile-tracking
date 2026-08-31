@@ -1,4 +1,4 @@
-# Supabase setup — Pet Focus
+# Supabase setup — BUDDY RISE
 
 ## 1. Apply migrations
 

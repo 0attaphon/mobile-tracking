@@ -18,6 +18,13 @@ import {
   COAT_IMG,
   GLASSES_ROUND_IMG,
   STUDENT_UNIFORM_IMG,
+  HAT_CROWN_GOLD_IMG,
+  HAT_BEAR_HOOD_IMG,
+  SUIT_IMPERIAL_CLOAK_IMG,
+  SUIT_COSMIC_CAPE_IMG,
+  SUIT_ROYAL_ROBE_IMG,
+  SUIT_ASTRONAUT_IMG,
+  SUIT_DINO_IMG,
 } from '@/assets/shopAssets'
 
 export type ItemCategory = 'outfit' | 'room' | 'background' | 'pet'
@@ -40,7 +47,6 @@ export interface ShopItem {
   // background items only
   bgColor?: string
   bgGradient?: [string, string]
-  tabBarColor?: string
   surfaceColor?: string
   petId?: PetId
 }
@@ -71,11 +77,18 @@ export const SHOP_ITEMS: ShopItem[] = [
   { id: 'hat_cat_ears', name: 'หมวกหูแมว', emoji: '🐱', category: 'outfit', rarity: 'rare', price: 240, currency: 'coin', description: 'หมวกไหมพรมมีหูแมวน่ารัก', image: HAT_CAT_EARS_IMG, riveInput: 'hat8' },
   { id: 'hat_cap_fish', name: 'หมวกแก๊ปลายปลา', emoji: '🐟', category: 'outfit', rarity: 'common', price: 130, currency: 'coin', description: 'หมวกแก๊ปสีเขียวติดป้ายปลาสีสัน', image: HAT_CAP_FISH_IMG, riveInput: 'hat9' },
   { id: 'hat_beret_blue', name: 'เบเร่ต์สีฟ้า', emoji: '🧢', category: 'outfit', rarity: 'common', price: 120, currency: 'coin', description: 'หมวกเบเร่ต์สีฟ้าลายอุ้งเท้า', image: HAT_BERET_BLUE_IMG, riveInput: 'hat10' },
+  { id: 'hat_crown_gold', name: 'มงกุฎทอง', emoji: '👑', category: 'outfit', rarity: 'legendary', price: 750, currency: 'coin', description: 'มงกุฎทองประดับเพชรสีฟ้า สมค่าราชาแห่งโฟกัส', image: HAT_CROWN_GOLD_IMG, riveInput: 'hat11' },
+  { id: 'hat_bear_hood', name: 'หมวกฮู้ดหูหมี', emoji: '🐻', category: 'outfit', rarity: 'rare', price: 220, currency: 'coin', description: 'หมวกฮู้ดหูหมีน่ารักอบอุ่น', image: HAT_BEAR_HOOD_IMG, riveInput: 'hat12' },
   { id: 'outfit_raincoat', name: 'เสื้อกันฝนสีเหลือง', emoji: '🧥', category: 'outfit', rarity: 'rare', price: 280, currency: 'coin', description: 'เสื้อกันฝนสีเหลืองลายอุ้งเท้า กันฝนสุดเท่', image: HOOD_RAINCOAT_IMG, riveInput: 'hood' },
   { id: 'outfit_tuxedo', name: 'ชุดทักซิโด้', emoji: '🤵', category: 'outfit', rarity: 'legendary', price: 700, currency: 'coin', description: 'ทักซิโด้หรูหราสไตล์เจ้าบ่าว', image: SUIT_TUXEDO_IMG, riveInput: 'suit' },
   { id: 'outfit_coat', name: 'เสื้อโค้ทกันหนาว', emoji: '🧥', category: 'outfit', rarity: 'rare', price: 260, currency: 'coin', description: 'เสื้อโค้ทพร้อมผ้าพันคออุ่นๆ', image: COAT_IMG, riveInput: 'coat' },
   { id: 'glasses_round', name: 'แว่นทรงกลม', emoji: '👓', category: 'outfit', rarity: 'common', price: 140, currency: 'coin', description: 'แว่นทรงกลมสไตล์นักวิชาการ', image: GLASSES_ROUND_IMG, riveInput: 'glass2' },
   { id: 'outfit_uniform', name: 'ชุดนักเรียน', emoji: '👔', category: 'outfit', rarity: 'rare', price: 240, currency: 'coin', description: 'ชุดนักเรียนลายอุ้งเท้า ขยันเรียนสุดๆ', image: STUDENT_UNIFORM_IMG, riveInput: 'uniform' },
+  { id: 'outfit_imperial_cloak', name: 'เสื้อคลุมจักรพรรดิ', emoji: '🌙', category: 'outfit', rarity: 'legendary', price: 780, currency: 'coin', description: 'เสื้อคลุมทองประดับพระจันทร์และดอกไม้ม่วง สมศักดิ์จักรพรรดิ', image: SUIT_IMPERIAL_CLOAK_IMG, riveInput: 'suit2' },
+  { id: 'outfit_cosmic_cape', name: 'เสื้อคลุมพ่อมดจักรวาล', emoji: '✨', category: 'outfit', rarity: 'legendary', price: 720, currency: 'coin', description: 'เสื้อคลุมสีน้ำเงินยามค่ำคืน ประดับดาวและพระจันทร์เสี้ยว', image: SUIT_COSMIC_CAPE_IMG, riveInput: 'suit3' },
+  { id: 'outfit_royal_robe', name: 'ชุดคลุมกษัตริย์', emoji: '🐾', category: 'outfit', rarity: 'legendary', price: 850, currency: 'coin', description: 'ชุดคลุมสีน้ำเงินขลิบขนสัตว์ ประดับตราอุ้งเท้าทอง สุดหรูหรา', image: SUIT_ROYAL_ROBE_IMG, riveInput: 'suit4' },
+  { id: 'outfit_astronaut', name: 'ชุดนักบินอวกาศ', emoji: '🧑‍🚀', category: 'outfit', rarity: 'rare', price: 300, currency: 'coin', description: 'ชุดนักบินอวกาศพร้อมหมวกใส ติดตราอุ้งเท้าที่หน้าอก', image: SUIT_ASTRONAUT_IMG, riveInput: 'suit5' },
+  { id: 'outfit_dino', name: 'ชุดไดโนเสาร์', emoji: '🦖', category: 'outfit', rarity: 'rare', price: 260, currency: 'coin', description: 'ชุดไดโนเสาร์สีเขียวขี้เล่น ลายท้องเหลืองสไตล์การ์ตูน', image: SUIT_DINO_IMG, riveInput: 'suit6' },
   // { id: 'scarf_red', name: 'ผ้าพันคอแดง', emoji: '🧣', category: 'outfit', rarity: 'common', price: 80, currency: 'coin', description: 'อบอุ่นสบายใจ' },
   // { id: 'wings_butterfly', name: 'ปีกผีเสื้อ', emoji: '🦋', category: 'outfit', rarity: 'rare', price: 300, currency: 'coin', description: 'บินได้เหมือนนางฟ้า' },
   // { id: 'crown_gold', name: 'มงกุฎทอง', emoji: '👑', category: 'outfit', rarity: 'legendary', price: 800, currency: 'coin', description: 'ราชาแห่งโฟกัส' },
@@ -86,15 +99,35 @@ export const SHOP_ITEMS: ShopItem[] = [
   // { id: 'room_tv', name: 'โทรทัศน์', emoji: '📺', category: 'room', rarity: 'rare', price: 350, currency: 'coin', description: 'ดูหนังได้แบบ premium' },
   // { id: 'room_piano', name: 'เปียโน', emoji: '🎹', category: 'room', rarity: 'legendary', price: 700, currency: 'coin', description: 'บรรเลงเพลงสุดหรู' },
   // ─── Backgrounds ────────────────────────────────────────────────────────────
-  { id: 'bg_sky', name: 'ท้องฟ้าใส', emoji: '☁️', category: 'background', rarity: 'common', price: 50, currency: 'coin', description: 'ฟ้าสว่างสดชื่น', bgColor: '#E3F2FD', tabBarColor: '#1565C0', surfaceColor: '#1976D2' },
-  { id: 'bg_pink', name: 'ชมพูหวาน', emoji: '🌸', category: 'background', rarity: 'common', price: 50, currency: 'coin', description: 'หวานน่ารัก', bgColor: '#FCE4EC', tabBarColor: '#880E4F', surfaceColor: '#AD1457' },
-  { id: 'bg_mint', name: 'มิ้นต์สดใส', emoji: '🌿', category: 'background', rarity: 'common', price: 50, currency: 'coin', description: 'สดชื่นเย็นตา', bgColor: '#E8F5E9', tabBarColor: '#1B5E20', surfaceColor: '#2E7D32' },
-  { id: 'bg_lavender', name: 'ลาเวนเดอร์', emoji: '💜', category: 'background', rarity: 'common', price: 50, currency: 'coin', description: 'ม่วงอ่อนนุ่มตา', bgColor: '#F3E5F5', tabBarColor: '#4A148C', surfaceColor: '#6A1B9A' },
-  { id: 'bg_peach', name: 'พีชอ่อน', emoji: '🍑', category: 'background', rarity: 'common', price: 60, currency: 'coin', description: 'อบอุ่นหัวใจ', bgColor: '#FFF3E0', tabBarColor: '#E65100', surfaceColor: '#F4511E' },
-  { id: 'bg_ocean', name: 'ใต้ทะเล', emoji: '🌊', category: 'background', rarity: 'rare', price: 200, currency: 'coin', description: 'ลึกลับใต้น้ำ', bgGradient: ['#006994', '#00BCD4'], tabBarColor: '#003d5b', surfaceColor: '#00546e' },
-  { id: 'bg_sunset', name: 'พระอาทิตย์ตก', emoji: '🌅', category: 'background', rarity: 'rare', price: 200, currency: 'coin', description: 'สวยงามยามเย็น', bgGradient: ['#FF6B6B', '#FFD93D'], tabBarColor: '#B71C1C', surfaceColor: '#C62828' },
-  { id: 'bg_galaxy', name: 'กาแลกซี่', emoji: '🌌', category: 'background', rarity: 'legendary', price: 550, currency: 'coin', description: 'ห้วงอวกาศ', bgGradient: ['#0D0D2B', '#5B2D8E'], tabBarColor: '#1A0A3D', surfaceColor: '#2D1260' },
-  { id: 'bg_rainbow', name: 'สายรุ้ง', emoji: '🌈', category: 'background', rarity: 'legendary', price: 600, currency: 'coin', description: 'สีสันมหาสนุก', bgGradient: ['#FF6B6B', '#4ECDC4'], tabBarColor: '#B71C1C', surfaceColor: '#C62828' },
+  { id: 'bg_sky', name: 'ท้องฟ้าใส', emoji: '☁️', category: 'background', rarity: 'common', price: 50, currency: 'coin', description: 'ฟ้าสว่างสดชื่น', bgColor: '#E3F2FD', surfaceColor: '#1976D2' },
+  { id: 'bg_pink', name: 'ชมพูหวาน', emoji: '🌸', category: 'background', rarity: 'common', price: 50, currency: 'coin', description: 'หวานน่ารัก', bgColor: '#FCE4EC', surfaceColor: '#AD1457' },
+  { id: 'bg_mint', name: 'มิ้นต์สดใส', emoji: '🌿', category: 'background', rarity: 'common', price: 50, currency: 'coin', description: 'สดชื่นเย็นตา', bgColor: '#E8F5E9', surfaceColor: '#2E7D32' },
+  { id: 'bg_lavender', name: 'ลาเวนเดอร์', emoji: '💜', category: 'background', rarity: 'common', price: 50, currency: 'coin', description: 'ม่วงอ่อนนุ่มตา', bgColor: '#F3E5F5', surfaceColor: '#6A1B9A' },
+  { id: 'bg_peach', name: 'พีชอ่อน', emoji: '🍑', category: 'background', rarity: 'common', price: 60, currency: 'coin', description: 'อบอุ่นหัวใจ', bgColor: '#FFF3E0', surfaceColor: '#F4511E' },
+  { id: 'bg_ocean', name: 'ใต้ทะเล', emoji: '🌊', category: 'background', rarity: 'rare', price: 200, currency: 'coin', description: 'ลึกลับใต้น้ำ', bgColor: '#006994', bgGradient: ['#006994', '#00BCD4'], surfaceColor: '#00546e' },
+  { id: 'bg_sunset', name: 'พระอาทิตย์ตก', emoji: '🌅', category: 'background', rarity: 'rare', price: 200, currency: 'coin', description: 'สวยงามยามเย็น', bgColor: '#FF6B6B', bgGradient: ['#FF6B6B', '#FFD93D'], surfaceColor: '#C62828' },
+  { id: 'bg_galaxy', name: 'กาแลกซี่', emoji: '🌌', category: 'background', rarity: 'legendary', price: 550, currency: 'coin', description: 'ห้วงอวกาศ', bgColor: '#0D0D2B', bgGradient: ['#0D0D2B', '#5B2D8E'], surfaceColor: '#2D1260' },
+  { id: 'bg_rainbow', name: 'สายรุ้ง', emoji: '🌈', category: 'background', rarity: 'legendary', price: 600, currency: 'coin', description: 'สีสันมหาสนุก', bgColor: '#FF6B6B', bgGradient: ['#FF6B6B', '#4ECDC4'], surfaceColor: '#C62828' },
+  { id: 'bg_cotton_candy', name: 'สายไหมหวาน', emoji: '🍭', category: 'background', rarity: 'common', price: 90, currency: 'coin', description: 'ชมพูฟ้าน่ารัก', bgColor: '#FFAFCC', bgGradient: ['#FFAFCC', '#A2D2FF'], surfaceColor: '#6A3B6E' },
+  { id: 'bg_mango', name: 'มะม่วงสุก', emoji: '🥭', category: 'background', rarity: 'common', price: 90, currency: 'coin', description: 'เหลืองส้มสดใส', bgColor: '#FFD93D', bgGradient: ['#FFD93D', '#FF9A3D'], surfaceColor: '#B34700' },
+  { id: 'bg_watermelon', name: 'แตงโมฉ่ำ', emoji: '🍉', category: 'background', rarity: 'common', price: 90, currency: 'coin', description: 'แดงเขียวสดชื่น', bgColor: '#F94C66', bgGradient: ['#F94C66', '#6FCF97'], surfaceColor: '#7A1F2B' },
+  { id: 'bg_lemonade', name: 'เลมอนเนดเย็น', emoji: '🍋', category: 'background', rarity: 'common', price: 90, currency: 'coin', description: 'เหลืองชมพูสดใส', bgColor: '#FFF9C4', bgGradient: ['#FFF9C4', '#FF61A6'], surfaceColor: '#8C2F5B' },
+  { id: 'bg_mint_choco', name: 'มินต์ช็อกโกแลต', emoji: '🍃', category: 'background', rarity: 'common', price: 90, currency: 'coin', description: 'เขียวมินต์เย็นตา', bgColor: '#0BAB64', bgGradient: ['#0BAB64', '#3BB78F'], surfaceColor: '#0B4D3A' },
+  { id: 'bg_morning_sky', name: 'ท้องฟ้ายามเช้า', emoji: '🌤️', category: 'background', rarity: 'common', price: 90, currency: 'coin', description: 'ชมพูฟ้าอ่อนละมุน', bgColor: '#FFDDE1', bgGradient: ['#FFDDE1', '#EE9CA7'], surfaceColor: '#8B4A5C' },
+  { id: 'bg_flamingo', name: 'นกฟลามิงโก้', emoji: '🦩', category: 'background', rarity: 'common', price: 90, currency: 'coin', description: 'ชมพูสดสไตล์ทรอปิคอล', bgColor: '#FBD3E9', bgGradient: ['#FBD3E9', '#BB377D'], surfaceColor: '#7A2E52' },
+  { id: 'bg_ice', name: 'น้ำแข็งขั้วโลก', emoji: '❄️', category: 'background', rarity: 'common', price: 90, currency: 'coin', description: 'ฟ้าเย็นสดใส', bgColor: '#83A4D4', bgGradient: ['#83A4D4', '#B6FBFF'], surfaceColor: '#2E5C8A' },
+  { id: 'bg_cherry', name: 'เชอร์รี่หวาน', emoji: '🍒', category: 'background', rarity: 'common', price: 90, currency: 'coin', description: 'แดงส้มสดชื่น', bgColor: '#EB3349', bgGradient: ['#EB3349', '#F45C43'], surfaceColor: '#7A1620' },
+  { id: 'bg_bubblegum', name: 'บับเบิ้ลกัม', emoji: '🎈', category: 'background', rarity: 'common', price: 90, currency: 'coin', description: 'ชมพูพาสเทลหวานฟรุ้งฟริ้ง', bgColor: '#FF9A9E', bgGradient: ['#FF9A9E', '#FAD0C4'], surfaceColor: '#8C3B57' },
+  { id: 'bg_aurora', name: 'ออโรร่าเหนือ', emoji: '🌠', category: 'background', rarity: 'rare', price: 180, currency: 'coin', description: 'แสงเหนือพลิ้วไหว', bgColor: '#00C9A7', bgGradient: ['#00C9A7', '#845EC2'], surfaceColor: '#3A1C71' },
+  { id: 'bg_grape_soda', name: 'กราวเบอร์รี่โซดา', emoji: '🍇', category: 'background', rarity: 'rare', price: 180, currency: 'coin', description: 'ม่วงบานเย็นสดใส', bgColor: '#7F00FF', bgGradient: ['#7F00FF', '#E100FF'], surfaceColor: '#4B0082' },
+  { id: 'bg_night_mist', name: 'หมอกราตรี', emoji: '🌫️', category: 'background', rarity: 'rare', price: 220, currency: 'coin', description: 'เขียวฟ้าตัดกับราตรี', bgColor: '#43C6AC', bgGradient: ['#43C6AC', '#191654'], surfaceColor: '#12203A' },
+  { id: 'bg_forest', name: 'ป่าเขียวครึ้ม', emoji: '🌲', category: 'background', rarity: 'rare', price: 180, currency: 'coin', description: 'เขียวเข้มร่มรื่น', bgColor: '#134E5E', bgGradient: ['#134E5E', '#71B280'], surfaceColor: '#0E3B2E' },
+  { id: 'bg_volcano', name: 'ลาวาภูเขาไฟ', emoji: '🌋', category: 'background', rarity: 'rare', price: 220, currency: 'coin', description: 'แดงส้มตัดน้ำเงินเข้ม', bgColor: '#DC2424', bgGradient: ['#DC2424', '#4A569D'], surfaceColor: '#5A1414' },
+  { id: 'bg_desert', name: 'ทะเลทรายยามเย็น', emoji: '🏜️', category: 'background', rarity: 'rare', price: 200, currency: 'coin', description: 'ส้มทองตัดฟ้าค่ำ', bgColor: '#F8B500', bgGradient: ['#F8B500', '#6478FB'], surfaceColor: '#4A3B78' },
+  { id: 'bg_twilight', name: 'สนธยา', emoji: '🌆', category: 'background', rarity: 'rare', price: 180, currency: 'coin', description: 'น้ำเงินเข้มยามพลบค่ำ', bgColor: '#0F2027', bgGradient: ['#0F2027', '#2C5364'], surfaceColor: '#0F2027' },
+  { id: 'bg_deep_space', name: 'อวกาศไร้ขอบ', emoji: '🪐', category: 'background', rarity: 'legendary', price: 500, currency: 'coin', description: 'มืดลึกลับกว่ากาแลกซี่', bgColor: '#000000', bgGradient: ['#000000', '#4B0082'], surfaceColor: '#1A0033' },
+  { id: 'bg_cyber', name: 'ไซเบอร์นีออน', emoji: '🌃', category: 'background', rarity: 'legendary', price: 480, currency: 'coin', description: 'นีออนสดจัดสไตล์อนาคต', bgColor: '#00F5FF', bgGradient: ['#00F5FF', '#FF00E5'], surfaceColor: '#3D0066' },
+  { id: 'bg_emerald', name: 'มรกตหรูหรา', emoji: '💎', category: 'background', rarity: 'legendary', price: 450, currency: 'coin', description: 'เขียวมรกตเรืองแสง', bgColor: '#0F9B0F', bgGradient: ['#0F9B0F', '#00C853'], surfaceColor: '#065A0F' },
 
   // ─── Pets ────────────────────────────────────────────────────────────────────
   { id: 'pet_dog', name: 'สุนัข', emoji: '🐕', category: 'pet', rarity: 'rare', price: 120, currency: 'coin', description: 'เพื่อนซี้น้องหมา', petId: 'pet_dog' },

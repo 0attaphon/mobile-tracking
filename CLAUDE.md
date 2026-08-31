@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Repository layout
 
-This is a multi-project repo for **Focus Group** — an Android app that reduces student phone use via a virtual-pet reward loop (focus sessions → coins/EXP → pet cosmetics). Four independently-deployed pieces share one Supabase backend:
+This is a multi-project repo for **BUDDY RISE** — an Android app that reduces student phone use via a virtual-pet reward loop (focus sessions → coins/EXP → pet cosmetics). Four independently-deployed pieces share one Supabase backend:
 
 | Path | What | Stack |
 |------|------|-------|

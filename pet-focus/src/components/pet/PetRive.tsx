@@ -1,15 +1,23 @@
 import React, { useCallback, useEffect, useRef } from 'react'
 import { View, NativeModules } from 'react-native'
-import { PetId, getPetCatalogEntry, RIVE_SOURCE_SUPPORTED_OUTFIT_INPUTS } from '@/types/pet'
+import {
+  PetId,
+  getPetCatalogEntry,
+  RIVE_SOURCE_SUPPORTED_OUTFIT_INPUTS,
+  VIEW_MODEL_BOUND_OUTFIT_INPUTS,
+} from '@/types/pet'
 import { getOutfitRiveInputs } from '@/types/shop'
 import { PET_CAT_RIV, PET_DOG_AND_CAT_RIV } from '@/assets/riveAssets'
 
 const isRiveAvailable = !!NativeModules.RiveReactNativeModule
 
 let Rive: any = null
+let AutoBind: ((value: boolean) => any) | null = null
 if (isRiveAvailable) {
   try {
-    Rive = require('rive-react-native').default
+    const riveModule = require('rive-react-native')
+    Rive = riveModule.default
+    AutoBind = riveModule.AutoBind
   } catch {
     // ignore
   }
@@ -44,7 +52,11 @@ function applyRiveInputs(
     const supportedInputs = RIVE_SOURCE_SUPPORTED_OUTFIT_INPUTS[entry.riveSource]
     for (const [inputName, value] of Object.entries(outfitInputs)) {
       if (supportedInputs && !supportedInputs.includes(inputName)) continue
-      ref.current.setInputState(stateMachineName, inputName, value)
+      if (VIEW_MODEL_BOUND_OUTFIT_INPUTS.includes(inputName)) {
+        ref.current.setBoolean(inputName, value)
+      } else {
+        ref.current.setInputState(stateMachineName, inputName, value)
+      }
     }
   } catch {
     // Rive native may not be ready yet
@@ -82,6 +94,7 @@ export function PetRive({
         stateMachineName={stateMachineName}
         style={{ width: size, height: size }}
         autoplay
+        dataBinding={AutoBind ? AutoBind(true) : undefined}
         onPlay={applyInputs}
       />
     </View>

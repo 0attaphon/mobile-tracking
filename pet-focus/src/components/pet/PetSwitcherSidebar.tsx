@@ -4,6 +4,7 @@ import { useRouter } from 'expo-router'
 import { usePetStore } from '@/stores/petStore'
 import { useUserStore } from '@/stores/userStore'
 import { useShopStore } from '@/stores/shopStore'
+import { EmojiIcon } from '@/components/EmojiIcon'
 import { PET_CATALOG, PetId, isPetOwned } from '@/types/pet'
 
 interface PetSwitcherSidebarProps {
@@ -63,7 +64,7 @@ export function PetSwitcherSidebar({ surfaceColor, textColor }: PetSwitcherSideb
                 ]}
                 activeOpacity={0.7}
               >
-                <Text style={styles.menuEmoji}>{owned ? pet.emoji : '🔒'}</Text>
+                {owned ? <EmojiIcon char={pet.emoji} size={22} /> : <EmojiIcon name="lock" size={22} />}
                 <Text
                   style={[
                     styles.menuLabel,
@@ -85,7 +86,7 @@ export function PetSwitcherSidebar({ surfaceColor, textColor }: PetSwitcherSideb
         style={[styles.toggle, { backgroundColor: surfaceColor }]}
         activeOpacity={0.8}
       >
-        <Text style={styles.toggleIcon}>{expanded ? '›' : '🐾'}</Text>
+        {expanded ? <Text style={styles.toggleIcon}>›</Text> : <EmojiIcon name="paw_prints" size={18} />}
       </TouchableOpacity>
     </View>
   )
@@ -114,9 +115,6 @@ const styles = StyleSheet.create({
   },
   menuItemActive: {
     backgroundColor: 'rgba(255, 201, 77, 0.25)',
-  },
-  menuEmoji: {
-    fontSize: 22,
   },
   menuLabel: {
     fontSize: 10,

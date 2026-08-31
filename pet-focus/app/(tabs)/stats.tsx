@@ -30,7 +30,7 @@ export default function StatsScreen() {
   const [activeTab, setActiveTab] = useState<Tab>('today')
   const [aiTip, setAiTip] = useState<string | null>(null)
   const [tipLoading, setTipLoading] = useState(false)
-  const { surface } = useAppTheme()
+  const { surface, text, textSecondary } = useAppTheme()
 
   const [notificationGranted, setNotificationGranted] = useState(true)
 
@@ -100,7 +100,7 @@ export default function StatsScreen() {
       >
         {/* Header */}
         <View className="pt-2 pb-4">
-          <Text className="text-white text-2xl font-bold">สถิติ 📊</Text>
+          <Text style={{ color: text }} className="text-2xl font-bold">สถิติ 📊</Text>
         </View>
 
         {/* Tabs */}
@@ -152,7 +152,7 @@ export default function StatsScreen() {
             className="bg-primary/10 border border-primary-light/30 rounded-2xl p-4 mb-4"
           >
             <Text className="text-primary-light text-sm font-semibold">🔔 ต้องการสิทธิ์แจ้งเตือน</Text>
-            <Text className="text-white/60 text-xs mt-1">
+            <Text style={{ color: textSecondary }} className="text-xs mt-1">
               กดที่นี่เพื่ออนุญาตการแจ้งเตือน (Focus session)
             </Text>
           </TouchableOpacity>
@@ -165,7 +165,7 @@ export default function StatsScreen() {
             className="bg-orange/10 border border-orange/30 rounded-2xl p-4 mb-4"
           >
             <Text className="text-orange text-sm font-semibold">⚠️ ต้องการสิทธิ์ Usage Access</Text>
-            <Text className="text-white/60 text-xs mt-1">
+            <Text style={{ color: textSecondary }} className="text-xs mt-1">
               กดที่นี่ → เปิด "Usage access" ให้ pet-focus → กลับมาดูสถิติ
             </Text>
           </TouchableOpacity>

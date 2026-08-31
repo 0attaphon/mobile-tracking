@@ -1,5 +1,6 @@
 import React from 'react'
 import { View, Text, ActivityIndicator } from 'react-native'
+import { EmojiIcon } from '@/components/EmojiIcon'
 
 interface AITipProps {
   petName: string
@@ -11,7 +12,7 @@ export function AITip({ petName, tip, isLoading }: AITipProps) {
   return (
     <View className="bg-primary/20 border border-primary-light/30 rounded-2xl p-4 mx-0 mt-2">
       <View className="flex-row items-center gap-2 mb-2">
-        <Text className="text-lg">🐱</Text>
+        <EmojiIcon name="cat" size={18} />
         <Text className="text-primary-light text-sm font-semibold">เคล็ดลับจาก{petName}</Text>
       </View>
       {isLoading ? (

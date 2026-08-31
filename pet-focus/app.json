@@ -1,7 +1,7 @@
 {
   "expo": {
-    "name": "FOCUS GROUP",
-    "slug": "focus-group",
+    "name": "BUDDY RISE",
+    "slug": "pet-focus",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon_pet.png",
@@ -13,7 +13,8 @@
       "backgroundColor": "#FFFFFF"
     },
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.oattaphon.petfocus"
     },
     "android": {
       "adaptiveIcon": {
@@ -26,7 +27,9 @@
         "android.permission.POST_NOTIFICATIONS",
         "android.permission.PACKAGE_USAGE_STATS",
         "android.permission.FOREGROUND_SERVICE",
-        "android.permission.FOREGROUND_SERVICE_SPECIAL_USE"
+        "android.permission.FOREGROUND_SERVICE_SPECIAL_USE",
+        "android.permission.CAMERA",
+        "android.permission.RECORD_AUDIO"
       ]
     },
     "web": {
@@ -49,7 +52,7 @@
       [
         "expo-camera",
         {
-          "cameraPermission": "Allow Focus Group to use the camera for face enrollment and chore verification."
+          "cameraPermission": "Allow BUDDY RISE to use the camera for face enrollment and chore verification."
         }
       ],
       [

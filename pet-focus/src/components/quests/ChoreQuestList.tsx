@@ -17,8 +17,9 @@ import { CameraCaptureModal } from '@/components/camera/CameraCaptureModal'
 
 export function ChoreQuestList() {
   const router = useRouter()
-  const { surface, border } = useAppTheme()
+  const { surface, border, textSecondary } = useAppTheme()
   const faceEnrolled = useIdentityStore((s) => s.faceEnrolled)
+  const todayQuestIds = useChoreQuestStore((s) => s.todayQuestIds)
   const ensureToday = useChoreQuestStore((s) => s.ensureToday)
   const getQuestProgress = useChoreQuestStore((s) => s.getQuestProgress)
   const recordAttempt = useChoreQuestStore((s) => s.recordAttempt)
@@ -85,15 +86,16 @@ export function ChoreQuestList() {
   }
 
   const activeCameraQuest = CHORE_QUESTS.find((q) => q.id === cameraQuestId)
+  const todayQuests = CHORE_QUESTS.filter((q) => todayQuestIds.includes(q.id))
 
   return (
     <>
       <ScrollView className="flex-1" contentContainerStyle={{ paddingBottom: 32 }}>
-        <Text className="text-white/60 text-sm mb-3 px-1">
+        <Text style={{ color: textSecondary }} className="text-sm mb-3 px-1">
           ถ่ายรูปให้เห็นทั้งใบหน้าและงานที่ทำ — รูปจะไม่ถูกเก็บ วิเคราะห์บนเครื่องแล้วทิ้ง
         </Text>
 
-        {CHORE_QUESTS.map((quest) => {
+        {todayQuests.map((quest) => {
           const progress = getQuestProgress(quest.id)
           const done = Boolean(progress.completedAt)
           const loading = activeQuestId === quest.id

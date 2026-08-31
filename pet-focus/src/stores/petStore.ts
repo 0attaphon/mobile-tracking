@@ -14,7 +14,6 @@ interface PetState {
   activePetId: PetId
   level: number
   exp: number
-  hp: number
   happiness: number
   coins: number
   equippedItems: string[]
@@ -37,7 +36,6 @@ export const usePetStore = create<PetState>()(
       activePetId: DEFAULT_PET_ID,
       level: 1,
       exp: 0,
-      hp: 100,
       happiness: 80,
       coins: 0,
       equippedItems: [],

@@ -5,6 +5,7 @@ import { TimeSelector } from '@/components/focus/TimeSelector'
 import { BlockedAppsList } from '@/components/focus/BlockedAppsList'
 import { MoodCheckIn } from '@/components/focus/MoodCheckIn'
 import { ThemedScreen } from '@/components/ThemedScreen'
+import { EmojiIcon } from '@/components/EmojiIcon'
 import { useFocusSession } from '@/hooks/useFocusSession'
 import { usePetStatus } from '@/hooks/usePetStatus'
 import { useAppTheme } from '@/hooks/useAppTheme'
@@ -15,7 +16,7 @@ export default function FocusScreen() {
   const { status, isPaused, selectedMinutes, remainingSeconds, begin, cancel, reset, selectDuration, lastReward } =
     useFocusSession()
   const { name } = usePetStatus()
-  const { surface } = useAppTheme()
+  const { surface, text, textSecondary } = useAppTheme()
   const logMood = useFocusStore((s) => s.logMood)
   const [moodStep, setMoodStep] = useState(false)
 
@@ -39,8 +40,8 @@ export default function FocusScreen() {
       <View className="flex-1 px-5">
         {/* Header */}
         <View className="pt-2 pb-4">
-          <Text className="text-white text-2xl font-bold">Focus Mode ⏱</Text>
-          <Text className="text-text-secondary text-sm mt-0.5">
+          <Text style={{ color: text }} className="text-2xl font-bold">Focus Mode ⏱</Text>
+          <Text style={{ color: textSecondary }} className="text-sm mt-0.5">
             วางโทรศัพท์ → {name}มีความสุข 🐱
           </Text>
         </View>
@@ -64,7 +65,7 @@ export default function FocusScreen() {
 
         {/* Reward preview */}
         <View className="flex-row justify-center items-center gap-2 my-4">
-          <Text className="text-text-secondary text-sm">รางวัลที่ได้รับ:</Text>
+          <Text style={{ color: textSecondary }} className="text-sm">รางวัลที่ได้รับ:</Text>
           <Text className="text-yellow font-bold">+{getCoinsForDuration(selectedMinutes)} ⭐</Text>
           <Text className="text-primary-light font-bold">+{getCoinsForDuration(selectedMinutes) * 2} EXP</Text>
         </View>
@@ -96,7 +97,7 @@ export default function FocusScreen() {
       <Modal visible={isDone && !moodStep} transparent animationType="fade">
         <View className="flex-1 bg-black/70 items-center justify-center px-8">
           <View style={{ backgroundColor: surface }} className="rounded-3xl p-8 items-center w-full">
-            <Text className="text-5xl mb-3">🎉</Text>
+            <EmojiIcon name="party_popper" size={48} style={{ marginBottom: 12 }} />
             <Text className="text-white text-xl font-bold">โฟกัสสำเร็จ!</Text>
             <Text className="text-text-secondary text-sm mt-2 text-center">
               {name}มีความสุขมากขึ้นเลย
@@ -153,7 +154,7 @@ export default function FocusScreen() {
       <Modal visible={isFailed} transparent animationType="fade">
         <View className="flex-1 bg-black/70 items-center justify-center px-8">
           <View style={{ backgroundColor: surface }} className="rounded-3xl p-8 items-center w-full">
-            <Text className="text-5xl mb-3">🌱</Text>
+            <EmojiIcon name="seedling" size={48} style={{ marginBottom: 12 }} />
             <Text className="text-white text-xl font-bold">ไม่เป็นไรนะ ไว้ลองใหม่!</Text>
             <Text className="text-text-secondary text-sm mt-2 text-center">
               {name}ยังรอเล่นกับเราอยู่ — เริ่มใหม่เมื่อพร้อมได้เลย 💚

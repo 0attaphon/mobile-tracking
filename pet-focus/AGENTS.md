@@ -6,7 +6,7 @@ Read the exact versioned docs at https://docs.expo.dev/versions/v56.0.0/ before 
 
 ---
 
-# Focus Group — ภาพรวมโปรเจกต์
+# BUDDY RISE — ภาพรวมโปรเจกต์
 
 แอปช่วยลดเวลาใช้มือถือสำหรับนักเรียน โดยใช้สัตว์เลี้ยงเสมือนเป็นแรงจูงใจ (เสริมแรงเชิงบวก) ทำ Focus session → สัตว์เลี้ยงมีความสุข + ได้เหรียญ/EXP ไปแต่งตัว/ตกแต่งห้อง
 
@@ -29,6 +29,8 @@ npm run android        # build dev client ครั้งแรก
 - โมเดลใบหน้า: `assets/models/mobile_face_net.tflite` (ต้องเป็นไฟล์ binary จริง ไม่ใช่ HTML)
 - ไอคอนแอป: `assets/icon_pet.png` · Splash/loading: `assets/pet_loading.png`
 - Rive: แมว (`pet_cat.riv`) · แมวส้ม/หมา (`pet_dog_and_cat.riv`, input `cat/dog`: false=แมวส้ม, true=หมา); outfit inputs ทุกสัตว์: `straw_hat`, `wizard_hat`, `sunglass`, `hat`, `hat2`–`hat10`, `hood`, `suit`, `coat`, `uniform`, `glass2` (ไฟล์ cloud `Pet_cat` มี layer/input ครบแล้ว — export `.riv` ใหม่ทับ `assets/rive/pet_cat.riv` ต้องอัปเกรดแพลนของ Rive ก่อน MCP export ไม่ได้; `pet_dog_and_cat.riv` ยังไม่ยืนยันว่ามี input ชุดใหม่ ต้องเปิดไฟล์นั้นเช็ค/เพิ่ม layer ให้ตรงกันถ้าต้องการให้หมา/แมวส้มใส่ชุดใหม่ได้ด้วย)
+- **Outfit ชุดใหม่ (hat11, hat12, suit2–suit6) ผูกผ่าน ViewModel คนละกลไกกับของเดิม 19 ชิ้น:** ตัวเดิมทั้งหมดเป็น legacy SMI boolean input ยิงตรงผ่าน `setInputState(stateMachineName, name, value)`; 7 ชิ้นใหม่นี้ไม่มี transition ผูกกับ SMI input เลย ตัวควบคุมจริงคือ ViewModel `"Hats"` (instance `"Main"`, default view model ของ artboard) — ต้องยิงผ่าน `ref.setBoolean(name, value)` แทน และต้องเปิด `dataBinding={AutoBind(true)}` บน `<Rive>` ให้ ViewModel instance bind เข้ากับ artboard ก่อน ถึงจะมีผล ชื่อ input ทั้ง 7 ตัวอยู่ใน `VIEW_MODEL_BOUND_OUTFIT_INPUTS` (`types/pet.ts`) — `PetRive.tsx` เช็ค list นี้เพื่อเลือกยิง `setBoolean` หรือ `setInputState` ต่อ input แต่ละตัว ถ้าเพิ่ม outfit ใหม่ผ่าน ViewModel อีกต้องเติมชื่อใน list นี้ด้วย (ไม่ทำแล้วเครื่องแต่งกายจะซื้อ/สวมได้ใน UI แต่ตัวสัตว์ไม่เปลี่ยนภาพ — silent no-op)
+- `pet_dog_and_cat.riv` มี input ใหม่ครบแล้ว (`hat11`, `hat12`, `suit2`–`suit6`) แต่ยังไม่ export ทับไฟล์จริงใน `assets/rive/` (Rive MCP export ถูก sandbox บล็อกเขียนไฟล์ทุก path — ต้อง export มือผ่านเมนู editor เอง) — `pet_cat.riv` ยังไม่ตรวจ (อยู่คนละ tab ใน Rive editor, MCP เห็นแค่ tab active) ต้องเปิด tab `pet_cat` แล้วเช็ค/export ให้ตรงกันก่อนของใหม่จะโชว์บนแมวธรรมดาได้
 
 ## โครงสร้างหน้า (app/(tabs)/)
 - `index.tsx` — หน้า Home: สัตว์เลี้ยง (Rive + เครื่องแต่งกาย), HUD, stat bar, ของตกแต่ง, **แต่งตัว** (`OutfitPicker`), **แตะชื่อเปลี่ยนชื่อ**, **sidebar สลับสัตว์** (`PetSwitcherSidebar`)
@@ -42,17 +44,20 @@ npm run android        # build dev client ครั้งแรก
 - `face-enroll.tsx` — ลงทะเบียนใบหน้า (**ไม่บังคับ**): เปิดจากหน้าเควสหรือ Stats; ML Kit + MobileFaceNet → SecureStore (ไม่เก็บรูป); มี skip + `returnTo=quests`
 
 ## UI theme (NativeWind)
-- `tailwind.config.js` — สีหลัก: `background`/`bg` `#0F2820`, `surface` `#1A3D2E`, `accent` `#FFC94D`, `text-secondary` `#FAE7CB`; หน้า tabs ใช้ `ThemedScreen` (runtime จาก `roomStore`)
+- `tailwind.config.js` — สีหลัก (ค่าเริ่มต้น/ปุ่ม-badge เท่านั้น ไม่ใช้กับพื้นหลังหน้าจอ): `background`/`bg` `#0F2820`, `surface` `#1A3D2E`, `accent` `#FFC94D`, `text-secondary` `#FAE7CB`
+- **ระบบสีพื้นหลัง (runtime, unified)** — ทุกหน้า tabs (รวมหน้าหลัก) ใช้ `ThemedScreen` ตัวเดียวกันวาดพื้นหลังจาก `useAppTheme()`: solid `selectedBgColor` หรือ `LinearGradient(selectedBgGradient)` ถ้าไอเทมตั้ง gradient ไว้; `useAppTheme` คำนวณ `isLight` จาก luminance เฉลี่ยของ gradient (หรือของ `selectedBgColor` ถ้าไม่มี gradient) แล้วสลับ `text`/`textSecondary`/`border` เข้ม-อ่อนให้เอง — ห้าม hardcode `text-white`/`text-white/60` ทับพื้นหลังตรง ๆ อีก (ใช้ได้เฉพาะข้อความบนปุ่ม/การ์ด `surface` ที่มืดคงที่อยู่แล้ว) ไม่งั้นจะอ่านไม่ออกเมื่อผู้ใช้เปลี่ยนพื้นหลังเป็นสีอ่อน
+- แถบเมนู (`app/(tabs)/_layout.tsx`) ใช้ `tabBarBackground` วาดพื้นหลังเดียวกันกับหน้า (ไม่ใช่สีทึบ `tabBarColor` แยกอีกต่อไป — ฟิลด์นี้ถูกลบออกจาก `ShopItem`/`roomStore` แล้ว) และสลับสี tint ของแท็บตาม `isLight`
+- **ไอคอน (แทน emoji font)** — ไอคอนที่ยืนเดี่ยว (tab bar, ปุ่ม, badge เหรียญ, mood face, ไอเทมร้านค้าที่ไม่มี `image`) render ผ่าน `<EmojiIcon name="..."/>` หรือ `<EmojiIcon char="🐱"/>` (`src/components/EmojiIcon.tsx`) เป็นรูป PNG จาก [Twemoji](https://github.com/jdecked/twemoji) (CC-BY 4.0) เก็บไว้ใน `assets/emoji/*.png` — ไม่ใช่ font emoji ของเครื่อง (แต่ละ Android เรนเดอร์ไม่เหมือนกัน) รายชื่อ asset + map ตัวอักษร→asset อยู่ที่ `src/assets/emojiAssets.ts`/`emojiAssetNames.ts`; emoji ที่ฝังอยู่กลางประโยค/ข้อความ (เช่น "โฟกัสสำเร็จ! 🎉", `Alert.alert`) ยังคงเป็น text เดิม — ไม่แปลง เพิ่มไอคอนใหม่: หา asset ที่ต้องการใน Twemoji แล้วเพิ่มเข้า 2 ไฟล์นั้น
 
 ## Navigation / Auth gate
 - `app/_layout.tsx` — Root Stack + `IdentityGate`
 - `IdentityGate` — flow: `!isRegistered` → student-register → tabs; restore session จาก Supabase; flush sync queue; **ไม่บังคับ** face-enroll
 
 ## Stores (Zustand, src/stores/)
-- `petStore` — name/level/exp/hp/happiness/coins, `activePetId`, `species`, equippedItems; `setActivePet/setPetName/...`; **persist** `name`, `activePetId`, `species` (`pet-storage`)
+- `petStore` — name/level/exp/happiness/coins, `activePetId`, `species`, equippedItems; `setActivePet/setPetName/...`; **persist** `name`, `activePetId`, `species` (`pet-storage`)
 - `userStore` — `studentId`, `isRegistered` (**persist**), `nickname` (**persist**, ชื่อเล่นที่เพื่อนร่วมห้องเห็นบน leaderboard — แยกจากชื่อสัตว์เลี้ยงใน `petStore`), ownedItems; `setRegistered(studentId)`, `setNickname`
 - `focusStore` — สถานะ session (`idle`/`in_progress`/`completed`/`failed`), `isPaused`, timer, streak, totalFocusMinutes, **moodLog (persist AsyncStorage)**; helper `getCoinsForDuration`, `getSummary`; **`STREAK_BONUSES`** ให้โบนัสเหรียญเมื่อสตรีคถึง 1/3/7/14/30 วัน; **catch-up**: ขาดสตรีคแล้วกลับมาโฟกัสภายในเงื่อนไข (สตรีคเดิม ≥3, ไม่มี freeze) → เหรียญ 2 เท่าครั้งเดียว (`catchUpAvailable`); **Streak Freeze** (`freezeTokens`, สะสมสูงสุด 3, ได้ +1 ทุกสตรีคครบ 7 วัน) — ถ้ามี freeze ตอนขาดสตรีค จะใช้อัตโนมัติรักษาสตรีคไว้แทนการขาด (ไม่ได้โบนัส catch-up ซ้ำ)
-- `choreQuestStore` — สถานะเควสทำงานบ้านรายวัน (completedAt, retryCount), daily reset, ให้ coins ตอน complete; เก็บ `recentHashes` (hash รูป 5 รูปล่าสุดต่อเควส, local เท่านั้น) กันส่งรูปเดิมซ้ำ
+- `choreQuestStore` — สถานะเควสทำงานบ้านรายวัน (completedAt, retryCount), daily reset, ให้ coins ตอน complete; สุ่ม 3-5 เควส/วันจาก pool 26 ข้อ (`todayQuestIds`, seed คงที่ต่อวันด้วย `pickDailyQuestIds`); เก็บ `recentHashes` (hash รูป 5 รูปล่าสุดต่อเควส, local เท่านั้น) กันส่งรูปเดิมซ้ำ
 - `identityStore` — `faceEnrolled` flag (AsyncStorage) + sync กับ SecureStore embedding
 - `shopStore` — activeCategory
 - `roomStore` — พื้นหลัง/สี theme/ของตกแต่งที่วาง
@@ -79,7 +84,7 @@ npm run android        # build dev client ครั้งแรก
 - ตั้งค่า: ดู [`supabase/README.md`](../supabase/README.md) §7 Vercel; env จาก `.env.local.example`
 
 ## Components สำคัญ
-- `PetRive` — แสดง Rive ตาม `activePetId` (catalog `riveSource` + `dogCatInput`); ส่ง outfit inputs (`straw_hat`, `wizard_hat`, `sunglass`) จาก `equippedItems` ทุกสัตว์
+- `PetRive` — แสดง Rive ตาม `activePetId` (catalog `riveSource` + `dogCatInput`); ส่ง outfit inputs จาก `equippedItems` ทุกสัตว์ — ชิ้นเดิมยิงผ่าน `setInputState` (SMI boolean), ชิ้นที่อยู่ใน `VIEW_MODEL_BOUND_OUTFIT_INPUTS` ยิงผ่าน `ref.setBoolean` (ViewModel property, ต้องเปิด `dataBinding={AutoBind(true)}`)
 - `OutfitPicker` — ปุ่ม 👗 หน้า Home → เลือกสวม/ถอดเครื่องแต่งกายที่ซื้อแล้ว (หลายชิ้นพร้อมกัน, ทุกสัตว์)
 - `PetSwitcherSidebar` — ปุ่มลอยขวา Home สลับสัตว์; หมาต้องซื้อก่อน
 - `PetNameEditor` — แตะชื่อบน Home → Modal แก้ชื่อ (trim, 1–12 ตัวอักษร) → `setPetName`
@@ -98,7 +103,7 @@ npm run android        # build dev client ครั้งแรก
 4. **ร้านค้า** — ซื้อด้วยเหรียญ, owned → สวม/วาง/ตั้ง theme
 5. **เสริมแรงเชิงบวก** — fail ไม่ลงโทษ
 6. **ลงทะเบียนใบหน้า** — **ไม่บังคับ** ตอนเปิดแอป; เปิดจากหน้าเควสหรือ Stats; เก็บ embedding ใน SecureStore ไม่เก็บรูป; re-enroll ได้จาก Stats
-7. **เควสทำงานบ้าน** — 6 เควส (`CHORE_QUESTS` ใน `focus.ts`, รางวัล 25 ⭐/เควส): กวาดบ้าน/ล้างจาน/จัดโต๊ะเรียน/รีดผ้า/**รดน้ำต้นไม้**/**จัดเตียงนอน**; ถ่าย in-app เท่านั้น (ตัดเลือกจากคลังออกแล้วเพื่อกันโกง) → ต้อง enroll ใบหน้าก่อน + ผ่านทั้งใบหน้า + ไม่ใช่รูปซ้ำ (hash เทียบ 5 รูปล่าสุดต่อเควส) + label งานบ้าน; ลองใหม่ได้ไม่จำกัดจนกว่าจะสำเร็จ; รางวัล coins → `petStore.addCoins`. *2 เควสใหม่ยังไม่ทดสอบ label จริงบนอุปกรณ์ — ต้องเช็คก่อนใช้งานจริง*
+7. **เควสทำงานบ้าน** — pool 26 เควส (`CHORE_QUESTS` ใน `focus.ts`, รางวัล 15/25/40 ⭐ ตามความยาก); ทุกวันสุ่มมาแสดง **3-5 ข้อ** ต่อวัน (`pickDailyQuestIds` ใน `choreQuestStore.ts`, seed = `studentId:วันที่` ผ่าน mulberry32 → สุ่มคงที่ทั้งวัน รีสตาร์ทแอปไม่เปลี่ยน, เปลี่ยนตอนข้ามวันเท่านั้น); ถ่าย in-app เท่านั้น (ตัดเลือกจากคลังออกแล้วเพื่อกันโกง) → ต้อง enroll ใบหน้าก่อน + ผ่านทั้งใบหน้า + ไม่ใช่รูปซ้ำ (hash เทียบ 5 รูปล่าสุดต่อเควส) + label งานบ้าน; ลองใหม่ได้ไม่จำกัดจนกว่าจะสำเร็จ; รางวัล coins → `petStore.addCoins`. *20 เควสใหม่ (พับผ้า/เช็ดกระจก/ดูดฝุ่น/ล้างห้องน้ำ ฯลฯ) ยังไม่ทดสอบ label จริงบนอุปกรณ์ — ต้องเช็คก่อนใช้งานจริง เหมือนที่เคยเตือนไว้กับรดน้ำต้นไม้/จัดเตียง*
 8. **เปลี่ยนชื่อสัตว์เลี้ยง** — แตะชื่อบน Home → modal; บันทึกลง `petStore.name` (persist AsyncStorage)
 9. **สัตว์เลี้ยงหลายตัว** — แมว default (`pet_cat`); แมวส้ม (`pet_orange_cat`, 150 ⭐) · หมา (`pet_dog`, 120 ⭐); สลับผ่าน sidebar หรือร้านค้า → `setActivePet` sync `species` + Rive file
 10. **ลงทะเบียนนักเรียน** — 1 รหัส = 1 เครื่อง; ลบแอปแล้วติดตั้งใหม่ + รหัสเดิม + device เดิม → `register_student` restore session (ไม่ error ซ้ำ)
@@ -119,9 +124,12 @@ npm run android        # build dev client ครั้งแรก
 | แอพเด้ง (SIGABRT) ตอนเปิดหมา/แมวส้ม | `pet_dog_and_cat.riv` ไม่มี input `coat`/`glass2`/`uniform` บน State Machine 1 แต่ `PetRive` ยิง `setInputState` ทุก outfit input แบบไม่กรอง — native throw `StateMachineInputException` ข้าม JNI boundary จับด้วย JS try/catch ไม่ได้ | กรองด้วย `RIVE_SOURCE_SUPPORTED_OUTFIT_INPUTS` (`types/pet.ts`) ก่อน `setInputState` ใน `PetRive.tsx`; ของถาวรคือเพิ่ม layer+input ที่ขาดใน `pet_dog_and_cat.riv` แล้วเอาออกจาก allowlist |
 
 ## ประวัติการเปลี่ยนแปลงล่าสุด
+- เพิ่มเควสทำงานบ้าน 20 อัน (รวมเป็น pool 26 อัน) + เปลี่ยนจากแสดงครบทุกวันเป็นสุ่ม 3-5 ข้อ/วัน (seed คงที่ต่อวันด้วย `studentId+วันที่`, `pickDailyQuestIds` ใน `choreQuestStore.ts`); แบ่งรางวัลตามความยาก 15/25/40 ⭐; sync `shared/choreQuestLabels.ts` ให้ครบทุก id (เดิมขาด 2 อันจากรอบก่อน). *เควสใหม่ 20 อันยังไม่ทดสอบ label จริงจาก ML Kit บนอุปกรณ์จริง — ต้อง verify ก่อนใช้งานจริง*
 - Fix แอพเด้งตอนเปิด `pet_dog_and_cat.riv`: เพิ่ม allowlist `RIVE_SOURCE_SUPPORTED_OUTFIT_INPUTS` กรอง outfit input ที่ยังไม่มีในไฟล์ (`coat`/`glass2`/`uniform`) ก่อนยิง `setInputState` — ไฟล์นี้ยังขาด layer/input พวกนี้ ต้องเพิ่มใน Rive editor แล้วลบออกจาก allowlist ทีหลัง
 - เพิ่มเครื่องแต่งกายใหม่ 15 ชิ้นในร้านค้า (หมวกทรงสูง, เบเร่ต์ 4 สี/ลาย, บักเก็ต, ไหมพรม, มงกุฎดอกไม้, แก๊ปโบว์, หูแมว, แก๊ปปลา, เสื้อกันฝน, ทักซิโด้, เสื้อโค้ท, แว่นทรงกลม, ชุดนักเรียน) — map เข้า Rive input `hat`/`hat2`–`hat10`/`hood`/`suit`/`coat`/`uniform`/`glass2` ที่มี layer พร้อมแล้วใน `pet_cat.riv` (ต้อง export `.riv` ทับไฟล์จริงเอง เพราะ MCP export ถูก gate ด้วยแพลน Rive); ยังไม่เช็ค/ทำ `pet_dog_and_cat.riv` ให้ตรงกัน
-- เพิ่มโบนัสเหรียญ Focus/Streak (`STREAK_BONUSES`), catch-up 2 เท่าเมื่อขาดสตรีคแล้วกลับมา, Streak Freeze กันสตรีคขาดล่วงหน้า; ปรับราคาร้านค้าลง; เพิ่มเควสทำงานบ้าน 2 อัน (รดน้ำต้นไม้/จัดเตียง) + บวกรางวัลเควสเดิมเป็น 25 ⭐; ตัดปุ่มเลือกรูปจากคลังในเควส (บังคับกล้อง in-app) + เพิ่มเช็ค hash รูปซ้ำ (anti-cheat, on-device only); เพิ่มปุ่มพิมพ์สรุปนักเรียนใน admin-web; เพิ่มอันดับห้อง (Class Leaderboard) — ต้อง apply migration `supabase/migrations/20260827000000_class_leaderboard.sql` (เพิ่ม `class_name`/`nickname` + RPC `get_class_leaderboard`) ผ่าน Change Management ก่อนใช้งานจริง เพราะยังไม่ได้ push ขึ้น production
+- เพิ่มโบนัสเหรียญ Focus/Streak (`STREAK_BONUSES`), catch-up 2 เท่าเมื่อขาดสตรีคแล้วกลับมา, Streak Freeze กันสตรีคขาดล่วงหน้า; ปรับราคาร้านค้าลง; เพิ่มเควสทำงานบ้าน 2 อัน (รดน้ำต้นไม้/จัดเตียง) + บวกรางวัลเควสเดิมเป็น 25 ⭐; ตัดปุ่มเลือกรูปจากคลังในเควส (บังคับกล้อง in-app) + เพิ่มเช็ค hash รูปซ้ำ (anti-cheat, on-device only); เพิ่มปุ่มพิมพ์สรุปนักเรียนใน admin-web; เพิ่มอันดับห้อง (Class Leaderboard) — migration `supabase/migrations/20260827000000_class_leaderboard.sql` (เพิ่ม `class_name`/`nickname` + RPC `get_class_leaderboard`) apply ขึ้น production แล้ว (ยืนยันด้วย `supabase migration list`)
+- ลบ field `hp` ที่ไม่ได้ใช้งาน (ค้างที่ 100 ตลอด ไม่มี action แก้ไข) ออกจาก `petStore`/`Pet` type/`usePetStatus`/แถบสถานะหน้า Home
+- แก้ nickname ไม่ sync ขึ้น DB: `public.students` มี RLS select/insert แต่ไม่มี update policy ทำให้ `syncNickname()` ถูกบล็อกแบบ silent (0 rows affected, ไม่ throw) — เพิ่ม migration `20260831000000_students_update_policy.sql` (apply ขึ้น production แล้ว) และแก้ `syncNickname()` (`sync.ts`) ให้เช็ค `{ error }` ที่ query คืนมาจริง (เดิมเช็คแต่ throw ซึ่ง supabase-js `.update()` ไม่ throw) พร้อม log ผ่าน `__DEV__` เพื่อ debug ได้
 - Supabase: ลงทะเบียนรหัสนักเรียน + sync usage + admin-web dashboard
 - เพิ่ม Focus Foreground Service: ขอสิทธิ์แจ้งเตือน + notification นับถอยหลังขณะโฟกัสเบื้องหลัง (`FocusForegroundService.kt`)
 - เพิ่มสุนัข (`pet_dog_and_cat.riv`) + sidebar สลับสัตว์ + ซื้อหมาในร้าน (persist ownedItems/activePetId)

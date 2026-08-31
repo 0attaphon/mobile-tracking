@@ -2,6 +2,7 @@ import React, { useState } from 'react'
 import { View, Text, TouchableOpacity, Modal, ScrollView, Image } from 'react-native'
 import { useRouter } from 'expo-router'
 import { useAppTheme } from '@/hooks/useAppTheme'
+import { EmojiIcon } from '@/components/EmojiIcon'
 import { usePetStore } from '@/stores/petStore'
 import { useUserStore } from '@/stores/userStore'
 import { OUTFIT_ITEMS, ShopItem } from '@/types/shop'
@@ -32,7 +33,7 @@ export function OutfitPicker({ surfaceColor, textColor }: OutfitPickerProps) {
         className="absolute left-5 top-1 px-3 py-2 rounded-full flex-row items-center gap-1"
         activeOpacity={0.7}
       >
-        <Text className="text-base">👗</Text>
+        <EmojiIcon name="dress" size={16} />
         <Text style={{ color: textColor }} className="text-xs font-semibold">แต่งตัว</Text>
       </TouchableOpacity>
 
@@ -46,7 +47,7 @@ export function OutfitPicker({ surfaceColor, textColor }: OutfitPickerProps) {
 
             {ownedOutfits.length === 0 ? (
               <View className="items-center py-8">
-                <Text className="text-4xl mb-2">🛍️</Text>
+                <EmojiIcon name="shopping_bags" size={40} style={{ marginBottom: 8 }} />
                 <Text className="text-text-secondary text-sm text-center mb-4">
                   ยังไม่มีเครื่องแต่งกาย{'\n'}ไปซื้อที่ร้านค้าก่อนนะ
                 </Text>
@@ -76,7 +77,7 @@ export function OutfitPicker({ surfaceColor, textColor }: OutfitPickerProps) {
                         {item.image ? (
                           <Image source={item.image} style={{ width: 40, height: 40 }} resizeMode="contain" />
                         ) : (
-                          <Text className="text-3xl mb-1">{item.emoji}</Text>
+                          <EmojiIcon char={item.emoji} size={32} style={{ marginBottom: 4 }} />
                         )}
                         <Text className="text-white text-xs font-semibold text-center mt-1" numberOfLines={2}>
                           {item.name}

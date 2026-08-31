@@ -35,10 +35,19 @@ export function getPetCatalogEntry(petId: PetId): PetCatalogEntry {
 export const RIVE_SOURCE_SUPPORTED_OUTFIT_INPUTS: Partial<Record<PetRiveSource, string[]>> = {
   pet_dog_and_cat: [
     'straw_hat', 'wizard_hat', 'sunglass',
-    'hat', 'hat2', 'hat3', 'hat4', 'hat5', 'hat6', 'hat7', 'hat8', 'hat9', 'hat10',
-    'hood', 'suit', 'uniform', 'coat',
+    'hat', 'hat2', 'hat3', 'hat4', 'hat5', 'hat6', 'hat7', 'hat8', 'hat9', 'hat10', 'hat11', 'hat12',
+    'hood', 'suit', 'uniform', 'coat', 'suit2', 'suit3', 'suit4', 'suit5', 'suit6',
   ],
 }
+
+/**
+ * Outfit inputs bound through the "Hats" ViewModel instance instead of a
+ * legacy SMI boolean input — must be set via Rive ref.setBoolean(path, value),
+ * not setInputState.
+ */
+export const VIEW_MODEL_BOUND_OUTFIT_INPUTS: string[] = [
+  'hat11', 'hat12', 'suit2', 'suit3', 'suit4', 'suit5', 'suit6',
+]
 
 export function isPetOwned(petId: PetId, ownedItems: string[]): boolean {
   const entry = getPetCatalogEntry(petId)
@@ -51,7 +60,6 @@ export interface Pet {
   species: PetSpecies
   level: number
   exp: number
-  hp: number
   happiness: number
   equippedItems: string[]
 }
