@@ -69,7 +69,7 @@ export default async function DashboardPage() {
 
         <Link
           href="/students"
-          className="inline-block mt-8 text-emerald-400 hover:text-emerald-300 text-sm"
+          className="inline-block mt-8 text-emerald-600 hover:text-emerald-500 dark:text-emerald-400 dark:hover:text-emerald-300 text-sm"
         >
           ดูรายชื่อนักเรียน →
         </Link>
@@ -80,8 +80,8 @@ export default async function DashboardPage() {
 
 function StatCard({ label, value }: { label: string; value: string }) {
   return (
-    <div className="bg-slate-900 border border-slate-800 rounded-xl p-5">
-      <p className="text-slate-400 text-sm">{label}</p>
+    <div className="bg-slate-50 border border-slate-200 dark:bg-slate-900 dark:border-slate-800 rounded-xl p-5">
+      <p className="text-slate-600 dark:text-slate-400 text-sm">{label}</p>
       <p className="text-3xl font-bold mt-1">{value}</p>
     </div>
   )

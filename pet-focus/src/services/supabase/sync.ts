@@ -36,6 +36,12 @@ type PendingItem =
         completedAt: string
       }
     }
+  | {
+      type: 'coin_delta'
+      payload: {
+        delta: number
+      }
+    }
 
 async function loadQueue(): Promise<PendingItem[]> {
   try {
@@ -91,12 +97,19 @@ async function pushItem(studentId: string, item: PendingItem): Promise<boolean> 
     return !error
   }
 
-  const { error } = await supabase.from('chore_completions').insert({
-    student_id: studentId,
-    quest_id: item.payload.questId,
-    date: item.payload.date,
-    coins_earned: item.payload.coinsEarned,
-    completed_at: item.payload.completedAt,
+  if (item.type === 'chore_completion') {
+    const { error } = await supabase.from('chore_completions').insert({
+      student_id: studentId,
+      quest_id: item.payload.questId,
+      date: item.payload.date,
+      coins_earned: item.payload.coinsEarned,
+      completed_at: item.payload.completedAt,
+    })
+    return !error
+  }
+
+  const { error } = await supabase.rpc('increment_student_coins', {
+    p_delta: item.payload.delta,
   })
   return !error
 }
@@ -178,6 +191,11 @@ export async function syncChoreCompletion(input: {
       completedAt: new Date().toISOString(),
     },
   })
+}
+
+export async function syncCoinDelta(delta: number): Promise<void> {
+  if (delta === 0) return
+  await syncOrQueue({ type: 'coin_delta', payload: { delta } })
 }
 
 export async function syncNickname(nickname: string): Promise<void> {

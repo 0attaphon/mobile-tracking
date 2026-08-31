@@ -67,8 +67,21 @@ export function TimerRing({ remainingSeconds, totalSeconds, size = 200, isPaused
         />
       </Svg>
       <View className="absolute items-center">
-        <Text className="text-white text-4xl font-bold tracking-wider">{timeLabel}</Text>
-        <Text className="text-text-secondary text-xs mt-1">
+        <Text
+          className="text-white text-4xl font-bold tracking-wider"
+          style={{
+            textShadowColor: 'rgba(0,0,0,0.4)',
+            textShadowOffset: { width: 0, height: 1 },
+            textShadowRadius: 4,
+          }}
+        >
+          {timeLabel}
+        </Text>
+        <Text className="text-text-secondary  text-xs mt-1" style={{
+          textShadowColor: 'rgba(0,0,0,0.4)',
+          textShadowOffset: { width: 0, height: 1 },
+          textShadowRadius: 4,
+        }}>
           {isPaused ? 'หยุดชั่วคราว ⏸' : progress === 1 ? 'พร้อมเริ่ม' : 'กำลังโฟกัส...'}
         </Text>
       </View>

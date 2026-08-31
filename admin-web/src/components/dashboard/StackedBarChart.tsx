@@ -12,13 +12,13 @@ export function StackedBarChart({
   const maxVal = Math.max(...series.map((d) => d.completed + d.failed), 1)
 
   return (
-    <div className="bg-slate-900 border border-slate-800 rounded-xl p-5">
+    <div className="bg-slate-50 border border-slate-200 dark:bg-slate-900 dark:border-slate-800 rounded-xl p-5">
       <div className="mb-4 flex flex-wrap items-start justify-between gap-2">
         <div>
           <h2 className="font-semibold">{title}</h2>
-          {subtitle ? <p className="text-slate-400 text-sm mt-0.5">{subtitle}</p> : null}
+          {subtitle ? <p className="text-slate-600 dark:text-slate-400 text-sm mt-0.5">{subtitle}</p> : null}
         </div>
-        <div className="flex gap-4 text-xs text-slate-400">
+        <div className="flex gap-4 text-xs text-slate-600 dark:text-slate-400">
           <span className="flex items-center gap-1.5">
             <span className="w-2.5 h-2.5 rounded-sm bg-emerald-500" />
             สำเร็จ
@@ -36,7 +36,7 @@ export function StackedBarChart({
           const completedShare = total > 0 ? (day.completed / total) * 100 : 0
           return (
             <div key={day.date} className="flex-1 min-w-0 flex flex-col items-center gap-2 h-full">
-              <span className="text-xs text-slate-400 tabular-nums">{total}</span>
+              <span className="text-xs text-slate-600 dark:text-slate-400 tabular-nums">{total}</span>
               <div className="w-full flex-1 flex flex-col justify-end">
                 <div
                   className="w-full flex flex-col-reverse overflow-hidden rounded-t-md"

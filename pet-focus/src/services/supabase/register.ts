@@ -25,7 +25,7 @@ export async function getDeviceId(): Promise<string> {
 }
 
 export type RegisterStudentResult =
-  | { ok: true; studentId: string }
+  | { ok: true; studentId: string; coins: number }
   | { ok: false; code: string; message: string }
 
 function mapRegisterError(message: string): RegisterStudentResult {
@@ -126,14 +126,15 @@ export async function registerStudent(studentId: string): Promise<RegisterStuden
 
     const row = Array.isArray(data) ? data[0] : data
     const registeredId = row?.student_id ?? normalized
-    return { ok: true, studentId: registeredId }
+    const coins = typeof row?.coins === 'number' ? row.coins : 0
+    return { ok: true, studentId: registeredId, coins }
   } catch (e) {
     const message = e instanceof Error ? e.message : 'UNKNOWN'
     return mapRegisterError(message)
   }
 }
 
-export async function restoreRegisteredStudent(): Promise<string | null> {
+export async function restoreRegisteredStudent(): Promise<{ studentId: string; coins: number } | null> {
   if (!isSupabaseConfigured) return null
 
   try {
@@ -150,10 +151,10 @@ export async function restoreRegisteredStudent(): Promise<string | null> {
 
   const { data, error } = await supabase
     .from('students')
-    .select('student_id')
+    .select('student_id, coins')
     .eq('id', sessionData.session.user.id)
     .maybeSingle()
 
   if (error || !data) return null
-  return data.student_id
+  return { studentId: data.student_id, coins: typeof data.coins === 'number' ? data.coins : 0 }
 }

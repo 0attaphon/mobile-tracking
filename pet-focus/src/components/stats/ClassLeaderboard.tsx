@@ -36,9 +36,9 @@ export function ClassLeaderboard() {
         </Text>
       ) : (
         <View>
-          {entries.map((entry) => (
+          {entries.map((entry, idx) => (
             <View
-              key={`${entry.rank}-${entry.nickname}`}
+              key={entry.studentId ?? `${entry.rank}-${entry.nickname}-${idx}`}
               className={`flex-row items-center justify-between py-2 px-2 rounded-xl mb-1 ${
                 entry.isMe ? 'bg-primary/20 border border-primary-light/40' : ''
               }`}

@@ -54,7 +54,7 @@ npm run android        # build dev client ครั้งแรก
 - `IdentityGate` — flow: `!isRegistered` → student-register → tabs; restore session จาก Supabase; flush sync queue; **ไม่บังคับ** face-enroll
 
 ## Stores (Zustand, src/stores/)
-- `petStore` — name/level/exp/happiness/coins, `activePetId`, `species`, equippedItems; `setActivePet/setPetName/...`; **persist** `name`, `activePetId`, `species` (`pet-storage`)
+- `petStore` — name/level/exp/happiness/coins, `activePetId`, `species`, equippedItems; `setActivePet/setPetName/...`; **persist** `name`, `activePetId`, `species`, `coins`, `equippedItems` (`pet-storage`). `addCoins`/`spendCoins` push the delta to `students.coins` server-side via `syncCoinDelta` (`sync.ts`, offline-queued, atomic `increment_student_coins` RPC) so a reinstall restores the balance instead of resetting to 0 — `hydrateCoins(coins)` is called with the server value right after `registerStudent`/`restoreRegisteredStudent` succeed (`student-register.tsx`, `IdentityGate.tsx`)
 - `userStore` — `studentId`, `isRegistered` (**persist**), `nickname` (**persist**, ชื่อเล่นที่เพื่อนร่วมห้องเห็นบน leaderboard — แยกจากชื่อสัตว์เลี้ยงใน `petStore`), ownedItems; `setRegistered(studentId)`, `setNickname`
 - `focusStore` — สถานะ session (`idle`/`in_progress`/`completed`/`failed`), `isPaused`, timer, streak, totalFocusMinutes, **moodLog (persist AsyncStorage)**; helper `getCoinsForDuration`, `getSummary`; **`STREAK_BONUSES`** ให้โบนัสเหรียญเมื่อสตรีคถึง 1/3/7/14/30 วัน; **catch-up**: ขาดสตรีคแล้วกลับมาโฟกัสภายในเงื่อนไข (สตรีคเดิม ≥3, ไม่มี freeze) → เหรียญ 2 เท่าครั้งเดียว (`catchUpAvailable`); **Streak Freeze** (`freezeTokens`, สะสมสูงสุด 3, ได้ +1 ทุกสตรีคครบ 7 วัน) — ถ้ามี freeze ตอนขาดสตรีค จะใช้อัตโนมัติรักษาสตรีคไว้แทนการขาด (ไม่ได้โบนัส catch-up ซ้ำ)
 - `choreQuestStore` — สถานะเควสทำงานบ้านรายวัน (completedAt, retryCount), daily reset, ให้ coins ตอน complete; สุ่ม 3-5 เควส/วันจาก pool 26 ข้อ (`todayQuestIds`, seed คงที่ต่อวันด้วย `pickDailyQuestIds`); เก็บ `recentHashes` (hash รูป 5 รูปล่าสุดต่อเควส, local เท่านั้น) กันส่งรูปเดิมซ้ำ
@@ -74,7 +74,7 @@ npm run android        # build dev client ครั้งแรก
 - `choreVerifier.ts` — ตรวจเควสตามลำดับ: verifyFace → เช็ค hash รูปซ้ำ (`isDuplicateHash`, เจอซ้ำ = reject ทันทีไม่ต้องรัน ML Kit) → ML Kit image labeling (log label ใน console/`__DEV__` alert); `expectedLabels` ปรับตาม label จริงที่ ML Kit คืน (เช่น room+chair ไม่ใช่ broom); ผ่านครบถึง `recordHash`
 - `../utils/imageHash.ts` — `hashImageFile(uri)`: อ่านไฟล์ผ่าน `expo-file-system` (base64) แล้ว SHA-1 ผ่าน `expo-crypto`; ใช้เทียบรูปซ้ำเท่านั้น ไม่เก็บ/ไม่อัปโหลดรูป
 - `firebase/` — config, functions (AI tip เท่านั้น)
-- `supabase/` — `client.ts`, `register.ts` (anon auth + RPC), `sync.ts` (focus/daily_usage/chore + offline queue + `syncNickname`/`fetchClassLeaderboard` แบบ best-effort ไม่ผ่าน queue)
+- `supabase/` — `client.ts`, `register.ts` (anon auth + RPC, คืน `coins` ปัจจุบันมาด้วยตอน register/restore), `sync.ts` (focus/daily_usage/chore/coin_delta ผ่าน offline queue + `syncNickname`/`fetchClassLeaderboard` แบบ best-effort ไม่ผ่าน queue)
 
 ## Admin Web (`admin-web/`)
 - Next.js App Router + Supabase SSR · deploy บน **Vercel** (Root Directory = `admin-web`)

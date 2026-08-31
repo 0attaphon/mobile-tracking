@@ -5,6 +5,7 @@ import * as SplashScreen from 'expo-splash-screen'
 import { APP_LOADING } from '@/assets/appImages'
 import { useIdentityStore } from '@/stores/identityStore'
 import { useUserStore } from '@/stores/userStore'
+import { usePetStore } from '@/stores/petStore'
 import { restoreRegisteredStudent } from '@/services/supabase/register'
 import { flushSyncQueue } from '@/services/supabase/sync'
 import { isSupabaseConfigured } from '@/services/supabase/client'
@@ -39,8 +40,10 @@ export function IdentityGate({ children }: { children: React.ReactNode }) {
     if (!hasHydrated || !isSupabaseConfigured) return
     if (useUserStore.getState().isRegistered) return
 
-    restoreRegisteredStudent().then((studentId) => {
-      if (studentId) setRegistered(studentId)
+    restoreRegisteredStudent().then((result) => {
+      if (!result) return
+      usePetStore.getState().hydrateCoins(result.coins)
+      setRegistered(result.studentId)
     })
   }, [hasHydrated, setRegistered])
 

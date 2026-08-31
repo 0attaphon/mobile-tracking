@@ -12,6 +12,7 @@ import { SafeAreaView } from 'react-native-safe-area-context'
 import { useRouter } from 'expo-router'
 import { registerStudent } from '@/services/supabase/register'
 import { useUserStore } from '@/stores/userStore'
+import { usePetStore } from '@/stores/petStore'
 
 export default function StudentRegisterScreen() {
   const router = useRouter()
@@ -29,6 +30,7 @@ export default function StudentRegisterScreen() {
         setError(result.message)
         return
       }
+      usePetStore.getState().hydrateCoins(result.coins)
       setRegistered(result.studentId)
       router.replace('/(tabs)')
     } catch {

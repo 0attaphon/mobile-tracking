@@ -52,7 +52,7 @@ export default async function StudentDetailPage({
         </div>
         <main className="max-w-5xl mx-auto px-6 py-8">
           <p>ไม่พบนักเรียน</p>
-          <Link href="/students" className="text-emerald-400 text-sm">
+          <Link href="/students" className="text-emerald-600 dark:text-emerald-400 text-sm">
             ← กลับ
           </Link>
         </main>
@@ -73,13 +73,13 @@ export default async function StudentDetailPage({
       <main className="max-w-5xl mx-auto px-6 py-8 space-y-8">
         <div>
           <div className="flex items-center justify-between">
-            <Link href="/students" className="text-emerald-400 text-sm hover:underline print:hidden">
+            <Link href="/students" className="text-emerald-600 dark:text-emerald-400 text-sm hover:underline print:hidden">
               ← กลับ
             </Link>
             <PrintSummaryButton />
           </div>
           <h1 className="text-2xl font-bold mt-2">รหัส {student.student_id}</h1>
-          <p className="text-slate-400 text-sm">
+          <p className="text-slate-600 dark:text-slate-400 text-sm">
             ลงทะเบียน {new Date(student.created_at).toLocaleString('th-TH')}
           </p>
           <div className="mt-3">
@@ -113,8 +113,8 @@ export default async function StudentDetailPage({
 
 function MiniStat({ label, value }: { label: string; value: string }) {
   return (
-    <div className="bg-slate-900 border border-slate-800 rounded-lg p-4">
-      <p className="text-slate-400 text-xs">{label}</p>
+    <div className="bg-slate-50 border border-slate-200 dark:bg-slate-900 dark:border-slate-800 rounded-lg p-4">
+      <p className="text-slate-600 dark:text-slate-400 text-xs">{label}</p>
       <p className="text-xl font-bold">{value}</p>
     </div>
   )
@@ -134,9 +134,9 @@ function SessionTable({
     return <p className="text-slate-500 text-sm">ยังไม่มีข้อมูล</p>
   }
   return (
-    <div className="overflow-x-auto rounded-xl border border-slate-800 text-sm">
+    <div className="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-800 text-sm">
       <table className="w-full">
-        <thead className="bg-slate-900 text-slate-400">
+        <thead className="bg-slate-100 text-slate-600 dark:bg-slate-900 dark:text-slate-400">
           <tr>
             <th className="text-left px-3 py-2">วันที่</th>
             <th className="text-left px-3 py-2">สถานะ</th>
@@ -146,7 +146,7 @@ function SessionTable({
         </thead>
         <tbody>
           {sessions.map((s, i) => (
-            <tr key={i} className="border-t border-slate-800">
+            <tr key={i} className="border-t border-slate-200 dark:border-slate-800">
               <td className="px-3 py-2">{new Date(s.created_at).toLocaleString('th-TH')}</td>
               <td className="px-3 py-2">{s.status}</td>
               <td className="px-3 py-2">{s.duration_minutes}</td>
@@ -175,9 +175,9 @@ function UsageTable({
   return (
     <div className="space-y-3">
       {rows.map((row) => (
-        <div key={row.date} className="bg-slate-900 border border-slate-800 rounded-lg p-4">
+        <div key={row.date} className="bg-slate-50 border border-slate-200 dark:bg-slate-900 dark:border-slate-800 rounded-lg p-4">
           <p className="font-medium">{row.date}</p>
-          <p className="text-slate-400 text-sm">
+          <p className="text-slate-600 dark:text-slate-400 text-sm">
             Screen {row.total_screen_minutes} นาที · Focus {row.focus_minutes} นาที
           </p>
           <AppUsageList apps={row.top_apps ?? []} limit={5} />
@@ -196,9 +196,9 @@ function ChoreTable({
     return <p className="text-slate-500 text-sm">ยังไม่มีข้อมูล</p>
   }
   return (
-    <div className="overflow-x-auto rounded-xl border border-slate-800 text-sm">
+    <div className="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-800 text-sm">
       <table className="w-full">
-        <thead className="bg-slate-900 text-slate-400">
+        <thead className="bg-slate-100 text-slate-600 dark:bg-slate-900 dark:text-slate-400">
           <tr>
             <th className="text-left px-3 py-2">เควส</th>
             <th className="text-left px-3 py-2">วันที่</th>
@@ -207,7 +207,7 @@ function ChoreTable({
         </thead>
         <tbody>
           {rows.map((r, i) => (
-            <tr key={i} className="border-t border-slate-800">
+            <tr key={i} className="border-t border-slate-200 dark:border-slate-800">
               <td className="px-3 py-2">{resolveChoreQuestLabel(r.quest_id)}</td>
               <td className="px-3 py-2">{r.date}</td>
               <td className="px-3 py-2">{r.coins_earned}</td>

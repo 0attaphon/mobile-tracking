@@ -51,11 +51,11 @@ export function AppUsageList({
             <div className="flex items-center gap-2">
               <AppIcon app={app} />
               <div className="flex-1 flex items-center justify-between gap-2 min-w-0">
-                <span className="text-sm text-slate-200 truncate">{app.name}</span>
+                <span className="text-sm text-slate-800 dark:text-slate-200 truncate">{app.name}</span>
                 <span className="text-xs text-slate-500 shrink-0">{formatUsageMinutes(app.minutes)}</span>
               </div>
             </div>
-            <div className="h-1.5 rounded-full bg-slate-800 mt-1 ml-10">
+            <div className="h-1.5 rounded-full bg-slate-200 dark:bg-slate-800 mt-1 ml-10">
               <div
                 className="h-full rounded-full"
                 style={{ width: `${pct * 100}%`, backgroundColor: BAR_COLORS[idx] }}

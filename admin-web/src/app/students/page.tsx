@@ -16,9 +16,9 @@ export default async function StudentsPage() {
       <AdminNav />
       <main className="max-w-5xl mx-auto px-6 py-8">
         <h1 className="text-2xl font-bold mb-6">รายชื่อนักเรียน</h1>
-        <div className="overflow-x-auto rounded-xl border border-slate-800">
+        <div className="overflow-x-auto rounded-xl border border-slate-200 dark:border-slate-800">
           <table className="w-full text-sm">
-            <thead className="bg-slate-900 text-slate-400">
+            <thead className="bg-slate-100 text-slate-600 dark:bg-slate-900 dark:text-slate-400">
               <tr>
                 <th className="text-left px-4 py-3">รหัสนักเรียน</th>
                 <th className="text-left px-4 py-3">ห้องเรียน</th>
@@ -28,14 +28,14 @@ export default async function StudentsPage() {
             </thead>
             <tbody>
               {(students ?? []).map((s) => (
-                <tr key={s.id} className="border-t border-slate-800">
+                <tr key={s.id} className="border-t border-slate-200 dark:border-slate-800">
                   <td className="px-4 py-3 font-medium">{s.student_id}</td>
-                  <td className="px-4 py-3 text-slate-400">{s.class_name ?? '-'}</td>
-                  <td className="px-4 py-3 text-slate-400">
+                  <td className="px-4 py-3 text-slate-600 dark:text-slate-400">{s.class_name ?? '-'}</td>
+                  <td className="px-4 py-3 text-slate-600 dark:text-slate-400">
                     {new Date(s.created_at).toLocaleString('th-TH')}
                   </td>
                   <td className="px-4 py-3">
-                    <Link href={`/students/${s.id}`} className="text-emerald-400 hover:underline">
+                    <Link href={`/students/${s.id}`} className="text-emerald-600 dark:text-emerald-400 hover:underline">
                       ดูรายละเอียด
                     </Link>
                   </td>

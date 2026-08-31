@@ -18,17 +18,17 @@ export function BarChart({
   const maxVal = Math.max(...series.map((d) => d.value), 1)
 
   return (
-    <div className="bg-slate-900 border border-slate-800 rounded-xl p-5">
+    <div className="bg-slate-50 border border-slate-200 dark:bg-slate-900 dark:border-slate-800 rounded-xl p-5">
       <div className="mb-4">
         <h2 className="font-semibold">{title}</h2>
-        {subtitle ? <p className="text-slate-400 text-sm mt-0.5">{subtitle}</p> : null}
+        {subtitle ? <p className="text-slate-600 dark:text-slate-400 text-sm mt-0.5">{subtitle}</p> : null}
       </div>
       <div className="flex items-end gap-2 h-44">
         {series.map((day) => {
           const pct = (day.value / maxVal) * 100
           return (
             <div key={day.date} className="flex-1 min-w-0 flex flex-col items-center gap-2 h-full">
-              <span className="text-xs text-slate-400 tabular-nums">
+              <span className="text-xs text-slate-600 dark:text-slate-400 tabular-nums">
                 {day.value}
                 {unit ? ` ${unit}` : ''}
               </span>

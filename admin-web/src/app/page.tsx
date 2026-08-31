@@ -27,14 +27,14 @@ export default function LandingPage() {
       <main>
         <section className="max-w-5xl mx-auto px-6 py-16 text-center">
           <h1 className="text-4xl sm:text-5xl font-bold mb-4">BUDDY RISE</h1>
-          <p className="text-lg text-slate-400 max-w-2xl mx-auto mb-8">
+          <p className="text-lg text-slate-600 dark:text-slate-400 max-w-2xl mx-auto mb-8">
             แอปช่วยลดเวลาใช้มือถือสำหรับนักเรียน ด้วยสัตว์เลี้ยงเสมือนเป็นแรงจูงใจ
             โฟกัสให้สำเร็จ สัตว์เลี้ยงมีความสุข ได้เหรียญไปแต่งตัวและตกแต่งห้อง
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
             <Link
               href="/download"
-              className="inline-block bg-emerald-600 hover:bg-emerald-500 rounded-lg px-8 py-3 font-medium"
+              className="inline-block bg-emerald-600 hover:bg-emerald-500 text-white rounded-lg px-8 py-3 font-medium"
             >
               ดาวน์โหลด APK
             </Link>
@@ -48,24 +48,24 @@ export default function LandingPage() {
             {features.map((feature) => (
               <div
                 key={feature.title}
-                className="bg-slate-900 border border-slate-800 rounded-xl p-6"
+                className="bg-slate-50 border border-slate-200 dark:bg-slate-900 dark:border-slate-800 rounded-xl p-6"
               >
-                <h3 className="text-lg font-semibold text-emerald-400 mb-2">{feature.title}</h3>
-                <p className="text-slate-400 text-sm leading-relaxed">{feature.description}</p>
+                <h3 className="text-lg font-semibold text-emerald-600 dark:text-emerald-400 mb-2">{feature.title}</h3>
+                <p className="text-slate-600 dark:text-slate-400 text-sm leading-relaxed">{feature.description}</p>
               </div>
             ))}
           </div>
         </section>
 
-        <section className="border-t border-slate-800 bg-slate-900/50">
+        <section className="border-t border-slate-200 bg-slate-50 dark:border-slate-800 dark:bg-slate-900/50">
           <div className="max-w-5xl mx-auto px-6 py-12 text-center">
             <h2 className="text-xl font-bold mb-3">เริ่มใช้งาน</h2>
-            <p className="text-slate-400 text-sm max-w-lg mx-auto mb-6">
+            <p className="text-slate-600 dark:text-slate-400 text-sm max-w-lg mx-auto mb-6">
               ดาวน์โหลดแอป ติดตั้งบน Android แล้วลงทะเบียนด้วยรหัสนักเรียนที่ได้รับจากโรงเรียน
             </p>
             <Link
               href="/download"
-              className="inline-block text-emerald-400 hover:text-emerald-300 text-sm"
+              className="inline-block text-emerald-600 hover:text-emerald-500 dark:text-emerald-400 dark:hover:text-emerald-300 text-sm"
             >
               ไปหน้าดาวน์โหลด →
             </Link>

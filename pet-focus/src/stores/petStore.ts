@@ -8,6 +8,7 @@ import {
   PetId,
   getPetCatalogEntry,
 } from '@/types/pet'
+import { syncCoinDelta } from '@/services/supabase/sync'
 interface PetState {
   name: string
   species: 'cat' | 'dog' | 'rabbit' | 'hamster'
@@ -22,6 +23,7 @@ interface PetState {
   updateHappiness: (delta: number) => void
   addCoins: (amount: number) => void
   spendCoins: (amount: number) => boolean
+  hydrateCoins: (coins: number) => void
   equipItem: (itemId: string) => void
   setPetName: (name: string) => void
   setActivePet: (petId: PetId) => void
@@ -57,16 +59,21 @@ export const usePetStore = create<PetState>()(
           happiness: Math.max(5, Math.min(100, state.happiness + delta)),
         })),
 
-      addCoins: (amount) =>
-        set((state) => ({ coins: state.coins + amount })),
+      addCoins: (amount) => {
+        set((state) => ({ coins: state.coins + amount }))
+        syncCoinDelta(amount)
+      },
 
       spendCoins: (amount) => {
         if (amount <= 0) return true
         const { coins } = get()
         if (coins < amount) return false
         set({ coins: coins - amount })
+        syncCoinDelta(-amount)
         return true
       },
+
+      hydrateCoins: (coins) => set({ coins }),
 
       equipItem: (itemId) =>
         set((state) => ({

@@ -6,7 +6,7 @@ import type { DashboardChartData } from '@/lib/dashboardStats'
 export function DashboardCharts({ data }: { data: DashboardChartData }) {
   return (
     <div className="mt-8 space-y-6">
-      <h2 className="text-lg font-semibold text-slate-200">แนวโน้ม 7 วันล่าสุด</h2>
+      <h2 className="text-lg font-semibold text-slate-800 dark:text-slate-200">แนวโน้ม 7 วันล่าสุด</h2>
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-4">
         <StackedBarChart
           title="Focus sessions"
@@ -37,9 +37,9 @@ export function DashboardCharts({ data }: { data: DashboardChartData }) {
       </div>
 
       {data.topApps.length > 0 ? (
-        <div className="bg-slate-900 border border-slate-800 rounded-xl p-5">
+        <div className="bg-slate-50 border border-slate-200 dark:bg-slate-900 dark:border-slate-800 rounded-xl p-5">
           <h2 className="font-semibold mb-1">แอปที่ใช้มากที่สุด (7 วัน)</h2>
-          <p className="text-slate-400 text-sm mb-3">รวมจากทุกนักเรียน</p>
+          <p className="text-slate-600 dark:text-slate-400 text-sm mb-3">รวมจากทุกนักเรียน</p>
           <AppUsageList apps={data.topApps} limit={5} />
         </div>
       ) : null}

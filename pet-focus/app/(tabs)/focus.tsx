@@ -64,7 +64,7 @@ export default function FocusScreen() {
         />
 
         {/* Reward preview */}
-        <View className="flex-row justify-center items-center gap-2 my-4">
+        <View className="flex-row justify-center items-center gap-2 my-4 ">
           <Text style={{ color: textSecondary }} className="text-sm">รางวัลที่ได้รับ:</Text>
           <Text className="text-yellow font-bold">+{getCoinsForDuration(selectedMinutes)} ⭐</Text>
           <Text className="text-primary-light font-bold">+{getCoinsForDuration(selectedMinutes) * 2} EXP</Text>

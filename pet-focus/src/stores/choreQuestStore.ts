@@ -77,17 +77,13 @@ export const useChoreQuestStore = create<ChoreQuestState>()(
 
       ensureToday: () => {
         const today = todayKey()
+        if (get().todayQuestsDate === today) return
         set((state) => {
-          let questIds = state.todayQuestIds
-          let questsDate = state.todayQuestsDate
-          if (questsDate !== today) {
-            const studentId = useUserStore.getState().studentId ?? 'anon'
-            questIds = pickDailyQuestIds(today, studentId)
-            questsDate = today
-          }
+          const studentId = useUserStore.getState().studentId ?? 'anon'
+          const questIds = pickDailyQuestIds(today, studentId)
           return {
             todayQuestIds: questIds,
-            todayQuestsDate: questsDate,
+            todayQuestsDate: today,
             progress: questIds.map((questId) => {
               const existing = state.progress.find(
                 (p) => p.questId === questId && p.date === today
@@ -99,7 +95,6 @@ export const useChoreQuestStore = create<ChoreQuestState>()(
       },
 
       getQuestProgress: (questId) => {
-        get().ensureToday()
         const today = todayKey()
         return (
           get().progress.find((p) => p.questId === questId && p.date === today) ??
