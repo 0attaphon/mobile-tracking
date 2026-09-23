@@ -1,6 +1,6 @@
 begin;
 
-select plan(46);
+select plan(62);
 
 select is(
   (select count(*)::integer from public.shop_catalog_items where version = 1),
@@ -29,6 +29,53 @@ create temporary table wallet_test_challenges (
 create temporary table wallet_test_attempts (
   name text primary key,
   id uuid not null
+);
+
+-- Fixed privileged assignments isolate the reward tests from rotating selections.
+insert into public.daily_quest_assignments (student_id, reward_type, quest_id, source_date, position)
+select '00000000-0000-0000-0000-000000000011'::uuid, reward_type, quest_id,
+  (clock_timestamp() at time zone 'Asia/Bangkok')::date, position
+from (values
+  ('chore', 'chore_sweep', 1), ('chore', 'chore_dishes', 2), ('chore', 'chore_desk', 3),
+  ('outdoor', 'outdoor_walk', 1), ('outdoor', 'outdoor_water_plants', 2),
+  ('outdoor', 'outdoor_sweep', 3), ('outdoor', 'outdoor_collect_leaves', 4)
+) as fixture(reward_type, quest_id, position);
+
+select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-000000000012', true);
+set local role authenticated;
+select results_eq(
+  $$select reward_type, count(*)::integer between 3 and 5 from public.ensure_daily_quest_assignments() group by reward_type order by reward_type$$,
+  $$values ('chore'::text, true), ('outdoor'::text, true)$$,
+  'assignment RPC creates bounded daily selections for the authenticated student'
+);
+select is(
+  (select count(*)::integer from public.ensure_daily_quest_assignments() where reward_type = 'outdoor'),
+  4, 'server selects exactly four outdoor quests'
+);
+select throws_ok(
+  $$insert into public.daily_quest_assignments (student_id, reward_type, quest_id, source_date, position)
+    values ('00000000-0000-0000-0000-000000000012', 'chore', 'chore_sweep', current_date, 1)$$,
+  '42501', 'permission denied for table daily_quest_assignments',
+  'clients cannot choose or replace server assignments directly'
+);
+reset role;
+create temporary table wallet_test_assignments as select * from public.ensure_daily_quest_assignments();
+select results_eq(
+  $$select reward_type, quest_id, source_date, position from public.ensure_daily_quest_assignments() order by reward_type, position$$,
+  $$select reward_type, quest_id, source_date, position from wallet_test_assignments order by reward_type, position$$,
+  'assignment retries preserve the canonical selection and order'
+);
+
+select ok(
+  (select bool_and(student_id = '00000000-0000-0000-0000-000000000012'::uuid
+    and source_date = (clock_timestamp() at time zone 'Asia/Bangkok')::date)
+    from public.ensure_daily_quest_assignments()),
+  'assignment RPC returns only the authenticated student and current Bangkok day'
+);
+select lives_ok(
+  $$select public.record_local_verification_attempt('60000000-0000-0000-0000-000000000080', 'chore',
+    (select quest_id from wallet_test_assignments where reward_type = 'chore' order by position limit 1))$$,
+  'server-generated selected quest accepts a verification attempt'
 );
 
 -- An absent auth context and a non-admin user must not be able to deduct.
@@ -133,6 +180,37 @@ select throws_ok(
   'P0001', 'CHALLENGE_NOT_FOUND',
   'an unknown challenge nonce cannot mint coins'
 );
+select throws_ok(
+  $$select public.record_local_verification_attempt('60000000-0000-0000-0000-000000000099', 'chore', 'chore_laundry')$$,
+  'P0001', 'QUEST_NOT_ASSIGNED',
+  'allowlisted but unassigned quest cannot record a verification attempt'
+);
+insert into public.daily_quest_assignments (student_id, reward_type, quest_id, source_date, position)
+values ('00000000-0000-0000-0000-000000000011', 'chore', 'chore_laundry',
+  (clock_timestamp() at time zone 'Asia/Bangkok')::date - 1, 1);
+select throws_ok(
+  $$select public.record_local_verification_attempt('60000000-0000-0000-0000-000000000098', 'chore', 'chore_laundry')$$,
+  'P0001', 'QUEST_NOT_ASSIGNED',
+  'a prior-day assignment cannot authorize a new attempt today'
+);
+-- Temporarily remove any caller assignment; the other student selection remains.
+create temporary table wallet_test_removed_assignments as
+with removed as (delete from public.daily_quest_assignments
+where student_id = '00000000-0000-0000-0000-000000000011'
+  and quest_id = (select quest_id from wallet_test_assignments where reward_type = 'chore' order by position limit 1)
+returning *) select * from removed;
+select throws_ok(
+  $$select public.record_local_verification_attempt('60000000-0000-0000-0000-000000000097', 'chore',
+    (select quest_id from wallet_test_assignments where reward_type = 'chore' order by position limit 1))$$,
+  'P0001', 'QUEST_NOT_ASSIGNED',
+  'another student assignment cannot authorize a verification attempt'
+);
+insert into public.daily_quest_assignments select * from wallet_test_removed_assignments;
+select results_eq(
+  $$select public.record_local_verification_attempt('60000000-0000-0000-0000-000000000001', 'chore', 'chore_sweep')$$,
+  $$values ('60000000-0000-0000-0000-000000000001'::uuid)$$,
+  'selected quest can record an attempt for the student and Bangkok day'
+);
 insert into wallet_test_attempts (name, id)
 select 'chore', public.record_local_verification_attempt('60000000-0000-0000-0000-000000000001', 'chore', 'chore_sweep');
 select throws_ok(
@@ -231,13 +309,18 @@ select results_eq(
   'server starts an in-progress focus reward session'
 );
 reset role;
+select ok(
+  (select ended_at is null from public.focus_sessions where id = '70000000-0000-0000-0000-000000000001'),
+  'in-progress focus has no completion timestamp'
+);
 select throws_ok(
   $$select * from public.issue_reward_challenge('focus', '70000000-0000-0000-0000-000000000001')$$,
   'P0001', 'FOCUS_NOT_COMPLETE',
   'fresh server-started focus session cannot issue a reward challenge'
 );
 update public.focus_sessions
-set started_at = clock_timestamp() - interval '31 minutes'
+-- Simulate a session that started before the previous Bangkok midnight.
+set started_at = ((clock_timestamp() at time zone 'Asia/Bangkok')::date - 1 + time '23:00') at time zone 'Asia/Bangkok'
 where id = '70000000-0000-0000-0000-000000000001';
 insert into wallet_test_challenges (name, nonce)
 select 'focus', nonce from public.issue_reward_challenge('focus', '70000000-0000-0000-0000-000000000001');
@@ -252,6 +335,33 @@ select is(
   'focus reward consumption completes the same server-started source row'
 );
 
+select ok(
+  (select ended_at is not null
+    and (ended_at at time zone 'Asia/Bangkok')::date > (started_at at time zone 'Asia/Bangkok')::date
+    and (ended_at at time zone 'Asia/Bangkok')::date = (clock_timestamp() at time zone 'Asia/Bangkok')::date
+    from public.focus_sessions where id = '70000000-0000-0000-0000-000000000001'),
+  'cross-midnight focus records the server completion day, not the start day'
+);
+select is(
+  (select source_date from public.coin_ledger where request_id = '70000000-0000-0000-0000-000000000002'),
+  (select (ended_at at time zone 'Asia/Bangkok')::date from public.focus_sessions where id = '70000000-0000-0000-0000-000000000001'),
+  'cross-midnight focus ledger uses the completion date'
+);
+create temporary table wallet_test_focus_end as
+select ended_at from public.focus_sessions where id = '70000000-0000-0000-0000-000000000001';
+select results_eq(
+  $$select balance, replayed from public.record_focus_completion('70000000-0000-0000-0000-000000000002', (select nonce from wallet_test_challenges where name = 'focus'))$$,
+  $$values (40::integer, true)$$,
+  'cross-midnight focus completion retry returns the original result'
+);
+
+select is(
+  (select ended_at from public.focus_sessions where id = '70000000-0000-0000-0000-000000000001'),
+  (select ended_at from wallet_test_focus_end),
+  'focus replay preserves the original completion timestamp'
+);
+
+select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-000000000011', true);
 select lives_ok(
   $$select * from public.import_legacy_inventory(array['hat_school', 'hat_school'], '40000000-0000-0000-0000-000000000001')$$,
   'legacy inventory import ignores duplicate known item IDs'
@@ -266,7 +376,7 @@ select throws_ok(
 select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-000000000013', true);
 set local role authenticated;
 select results_eq(
-  $$select balance from public.register_student('STUDENT-ONE', 'wallet-device-one')$$,
+  $$select coins from public.register_student('STUDENT-ONE', 'wallet-device-one')$$,
   $$values (160::integer)$$,
   'reinstall restores the confirmed balance'
 );
@@ -274,6 +384,11 @@ reset role;
 select is((select count(*)::integer from public.coin_ledger where student_id = '00000000-0000-0000-0000-000000000013'), 6, 'reinstall transfers ledger history to the new student ID');
 select is((select count(*)::integer from public.student_inventory where student_id = '00000000-0000-0000-0000-000000000013'), 1, 'reinstall transfers owned inventory to the new student ID');
 select is((select count(*)::integer from public.coin_ledger where student_id = '00000000-0000-0000-0000-000000000011'), 0, 'reinstall leaves no ledger history on the deleted student ID');
+
+select is(
+  (select count(*)::integer from public.daily_quest_assignments where student_id = '00000000-0000-0000-0000-000000000013'),
+  8, 'reinstall transfers current and historical assignments with verified attempts'
+);
 
 select * from finish();
 rollback;

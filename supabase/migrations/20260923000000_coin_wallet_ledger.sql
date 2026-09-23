@@ -57,6 +57,11 @@ create index student_inventory_source_ledger_idx
 alter table public.focus_sessions
   add column wallet_ledger_id uuid references public.coin_ledger (id) on delete restrict;
 
+-- A running session has no completion timestamp. Existing completed rows retain theirs.
+alter table public.focus_sessions
+  alter column ended_at drop not null,
+  alter column ended_at drop default;
+
 alter table public.focus_sessions
   drop constraint focus_sessions_status_check,
   add constraint focus_sessions_status_check
@@ -83,6 +88,20 @@ create type public.reward_challenge_result as (
   replayed boolean
 );
 
+-- Canonical daily selections are server-owned. Mobile must load these before
+-- showing/verifying quests; client-supplied lists cannot choose reward sources.
+create table public.daily_quest_assignments (
+  student_id uuid not null references public.students (id) on delete cascade,
+  reward_type text not null check (reward_type in ('chore', 'outdoor')),
+  quest_id text not null,
+  source_date date not null,
+  position integer not null check (position between 1 and 5),
+  created_at timestamptz not null default now(),
+  primary key (student_id, reward_type, quest_id, source_date),
+  unique (student_id, reward_type, source_date, position),
+  check (reward_type <> 'outdoor' or position <= 4)
+);
+
 -- The app records this only after its local camera/image verifier succeeds.
 -- The server cannot validate images because they are deliberately never
 -- uploaded, but it can make the verified attempt single-use and date-bound.
@@ -93,7 +112,10 @@ create table public.client_verification_attempts (
   quest_id text not null,
   source_date date not null,
   recorded_at timestamptz not null default now(),
-  unique (student_id, reward_type, quest_id, source_date)
+  unique (student_id, reward_type, quest_id, source_date),
+  foreign key (student_id, reward_type, quest_id, source_date)
+    references public.daily_quest_assignments (student_id, reward_type, quest_id, source_date)
+    on update cascade on delete restrict
 );
 
 -- A challenge is issued immediately before a locally verified activity is
@@ -249,29 +271,27 @@ begin
   end if;
 
   if p_reward_type = 'chore' then
-    return case p_source_id
-      when 'chore_sweep', 'chore_dishes', 'chore_desk', 'chore_laundry',
+    return case
+      when p_source_id in ('chore_sweep', 'chore_dishes', 'chore_desk', 'chore_laundry',
            'chore_water_plants', 'chore_make_bed', 'chore_sort_laundry_basket',
            'chore_clean_shoes', 'chore_vacuum', 'chore_trash',
            'chore_organize_closet', 'chore_clean_fan',
-           'chore_organize_bookshelf', 'chore_pack_toys', 'chore_feed_pet'
-        then 25
-      when 'chore_fold_towel', 'chore_wipe_mirror',
+           'chore_organize_bookshelf', 'chore_pack_toys', 'chore_feed_pet') then 25
+      when p_source_id in ('chore_fold_towel', 'chore_wipe_mirror',
            'chore_wipe_dining_table', 'chore_wash_bottle', 'chore_pack_bag',
            'chore_put_away_dishes', 'chore_arrange_pillows',
-           'chore_wipe_window' then 15
-      when 'chore_sweep_leaves', 'chore_clean_bathroom', 'chore_mop_floor'
-        then 40
+           'chore_wipe_window') then 15
+      when p_source_id in ('chore_sweep_leaves', 'chore_clean_bathroom', 'chore_mop_floor') then 40
       else null
     end;
   end if;
 
   if p_reward_type = 'outdoor' then
-    return case p_source_id
-      when 'outdoor_water_plants', 'outdoor_sweep', 'outdoor_collect_leaves',
+    return case
+      when p_source_id in ('outdoor_water_plants', 'outdoor_sweep', 'outdoor_collect_leaves',
            'outdoor_stretch', 'outdoor_walk', 'outdoor_balance',
-           'outdoor_tidy_corner' then 25
-      when 'outdoor_nature', 'outdoor_read', 'outdoor_tree' then 20
+           'outdoor_tidy_corner') then 25
+      when p_source_id in ('outdoor_nature', 'outdoor_read', 'outdoor_tree') then 20
       else null
     end;
   end if;
@@ -532,8 +552,74 @@ begin
   end if;
 
   insert into public.focus_sessions (id, student_id, duration_minutes, status, coins_earned, started_at)
-  values (p_source_id, v_student_id, p_duration_minutes, 'in_progress', 0, now());
+  values (p_source_id, v_student_id, p_duration_minutes, 'in_progress', 0, clock_timestamp());
   return p_source_id;
+end;
+$$;
+
+-- Call on each Bangkok day before local camera verification. Repeated calls
+-- return the persisted selection, including after same-device account restore.
+-- Stable student code (not auth UUID) seeds ordering; clients supply no seed,
+-- quest IDs, date, or count. Chores retain the existing 3-5/day count rule.
+create or replace function public.ensure_daily_quest_assignments()
+returns setof public.daily_quest_assignments
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_student_id uuid := auth.uid();
+  v_student_code text;
+  v_date date;
+  v_type text;
+  v_pool text[];
+  v_count integer;
+begin
+  if v_student_id is null then raise exception 'NOT_AUTHENTICATED'; end if;
+  select student_id into v_student_code from public.students where id = v_student_id for update;
+  if not found then raise exception 'STUDENT_NOT_FOUND'; end if;
+  v_date := (clock_timestamp() at time zone 'Asia/Bangkok')::date;
+
+  foreach v_type in array array['chore', 'outdoor'] loop
+    if exists (
+      select 1 from public.daily_quest_assignments
+      where student_id = v_student_id and reward_type = v_type and source_date = v_date
+    ) then
+      continue;
+    end if;
+
+    if v_type = 'chore' then
+      v_pool := array[
+        'chore_sweep', 'chore_dishes', 'chore_desk', 'chore_laundry',
+        'chore_water_plants', 'chore_make_bed', 'chore_sort_laundry_basket',
+        'chore_clean_shoes', 'chore_vacuum', 'chore_trash',
+        'chore_organize_closet', 'chore_clean_fan', 'chore_organize_bookshelf',
+        'chore_pack_toys', 'chore_feed_pet', 'chore_fold_towel',
+        'chore_wipe_mirror', 'chore_wipe_dining_table', 'chore_wash_bottle',
+        'chore_pack_bag', 'chore_put_away_dishes', 'chore_arrange_pillows',
+        'chore_wipe_window', 'chore_sweep_leaves', 'chore_clean_bathroom', 'chore_mop_floor'
+      ];
+      v_count := 3 + get_byte(decode(md5(v_student_code || ':' || v_date::text || ':count'), 'hex'), 0) % 3;
+    else
+      v_pool := array[
+        'outdoor_water_plants', 'outdoor_sweep', 'outdoor_collect_leaves',
+        'outdoor_stretch', 'outdoor_walk', 'outdoor_balance', 'outdoor_tidy_corner',
+        'outdoor_nature', 'outdoor_read', 'outdoor_tree'
+      ];
+      v_count := 4;
+    end if;
+
+    insert into public.daily_quest_assignments (student_id, reward_type, quest_id, source_date, position)
+    select v_student_id, v_type, q.quest_id, v_date,
+      row_number() over (order by md5(v_student_code || ':' || v_date::text || ':' || q.quest_id), q.quest_id)::integer
+    from unnest(v_pool) as q(quest_id)
+    order by md5(v_student_code || ':' || v_date::text || ':' || q.quest_id), q.quest_id
+    limit v_count;
+  end loop;
+
+  return query select a.* from public.daily_quest_assignments a
+    where a.student_id = v_student_id and a.source_date = v_date
+    order by a.reward_type, a.position;
 end;
 $$;
 
@@ -551,13 +637,17 @@ declare
   v_student_id uuid := auth.uid();
   v_existing public.client_verification_attempts%rowtype;
   v_quest_id text := trim(coalesce(p_quest_id, ''));
-  v_date date := (clock_timestamp() at time zone 'Asia/Bangkok')::date;
+  v_date date;
 begin
   if v_student_id is null then raise exception 'NOT_AUTHENTICATED'; end if;
   if p_attempt_id is null or p_reward_type not in ('chore', 'outdoor')
     or public.reward_coins_for_source(p_reward_type, v_quest_id) is null then
     raise exception 'INVALID_REWARD_SOURCE';
   end if;
+
+  perform 1 from public.students where id = v_student_id for update;
+  if not found then raise exception 'STUDENT_NOT_FOUND'; end if;
+  v_date := (clock_timestamp() at time zone 'Asia/Bangkok')::date;
 
   select * into v_existing from public.client_verification_attempts where id = p_attempt_id for update;
   if found then
@@ -568,6 +658,14 @@ begin
     end if;
     return p_attempt_id;
   end if;
+
+  -- Lock the selected assignment for this owner and server day. An allowlisted
+  -- quest alone is insufficient, and retries above keep their original date.
+  perform 1 from public.daily_quest_assignments
+  where student_id = v_student_id and reward_type = p_reward_type
+    and quest_id = v_quest_id and source_date = v_date
+  for update;
+  if not found then raise exception 'QUEST_NOT_ASSIGNED'; end if;
 
   if exists (
     select 1 from public.client_verification_attempts
@@ -732,7 +830,8 @@ begin
   end if;
   if v_challenge.expires_at <= clock_timestamp() then raise exception 'CHALLENGE_EXPIRED'; end if;
   update public.focus_sessions
-  set status = 'completed', ended_at = coalesce(ended_at, clock_timestamp())
+  set status = 'completed',
+    ended_at = case when status = 'in_progress' then clock_timestamp() else ended_at end
   where id = v_challenge.source_id::uuid
     and student_id = v_student_id
     and status in ('in_progress', 'completed');
@@ -872,6 +971,7 @@ begin
     update public.daily_usage set student_id = v_uid where student_id = v_existing.id;
     update public.chore_completions set student_id = v_uid where student_id = v_existing.id;
     update public.outdoor_completions set student_id = v_uid where student_id = v_existing.id;
+    update public.daily_quest_assignments set student_id = v_uid where student_id = v_existing.id;
     update public.client_verification_attempts set student_id = v_uid where student_id = v_existing.id;
     update public.reward_challenges set student_id = v_uid where student_id = v_existing.id;
     update public.coin_ledger set student_id = v_uid where student_id = v_existing.id;
@@ -1099,6 +1199,7 @@ alter table public.student_inventory enable row level security;
 alter table public.shop_catalog_versions enable row level security;
 alter table public.shop_catalog_items enable row level security;
 alter table public.outdoor_completions enable row level security;
+alter table public.daily_quest_assignments enable row level security;
 alter table public.client_verification_attempts enable row level security;
 alter table public.reward_challenges enable row level security;
 
@@ -1125,7 +1226,7 @@ create policy student_inventory_select_own on public.student_inventory
 -- security-definer RPCs above.
 revoke all on table public.coin_ledger, public.student_inventory,
   public.shop_catalog_versions, public.shop_catalog_items, public.outdoor_completions,
-  public.client_verification_attempts, public.reward_challenges
+  public.daily_quest_assignments, public.client_verification_attempts, public.reward_challenges
   from public, anon, authenticated;
 grant select on table public.coin_ledger, public.student_inventory to authenticated;
 
@@ -1138,6 +1239,7 @@ revoke all on function public.reward_coins_for_source(text, text) from public, a
 revoke all on function public.admin_deduct_student_coins(text, integer, uuid, integer) from public, anon, authenticated;
 revoke all on function public.claim_student_reward(uuid, text, text, date) from public, anon, authenticated;
 revoke all on function public.start_focus_reward_session(uuid, integer) from public, anon, authenticated;
+revoke all on function public.ensure_daily_quest_assignments() from public, anon, authenticated;
 revoke all on function public.record_local_verification_attempt(uuid, text, text) from public, anon, authenticated;
 revoke all on function public.issue_reward_challenge(text, text) from public, anon, authenticated;
 revoke all on function public.record_focus_completion(uuid, uuid) from public, anon, authenticated;
@@ -1149,6 +1251,7 @@ revoke all on function public.get_my_wallet() from public, anon, authenticated;
 revoke all on function public.get_my_coin_history(integer) from public, anon, authenticated;
 grant execute on function public.admin_deduct_student_coins(text, integer, uuid, integer) to authenticated;
 grant execute on function public.start_focus_reward_session(uuid, integer) to authenticated;
+grant execute on function public.ensure_daily_quest_assignments() to authenticated;
 grant execute on function public.record_local_verification_attempt(uuid, text, text) to authenticated;
 grant execute on function public.issue_reward_challenge(text, text) to authenticated;
 grant execute on function public.record_focus_completion(uuid, uuid) to authenticated;
