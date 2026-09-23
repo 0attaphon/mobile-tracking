@@ -1,6 +1,6 @@
 begin;
 
-select plan(40);
+select plan(46);
 
 select is(
   (select count(*)::integer from public.shop_catalog_items where version = 1),
@@ -24,6 +24,11 @@ insert into public.students (id, student_id, device_id, coins) values
 create temporary table wallet_test_challenges (
   name text primary key,
   nonce uuid not null
+);
+
+create temporary table wallet_test_attempts (
+  name text primary key,
+  id uuid not null
 );
 
 -- An absent auth context and a non-admin user must not be able to deduct.
@@ -128,10 +133,19 @@ select throws_ok(
   'P0001', 'CHALLENGE_NOT_FOUND',
   'an unknown challenge nonce cannot mint coins'
 );
-insert into wallet_test_challenges (name, nonce)
-select 'chore', nonce from public.issue_reward_challenge('chore', 'chore_sweep');
+insert into wallet_test_attempts (name, id)
+select 'chore', public.record_local_verification_attempt('60000000-0000-0000-0000-000000000001', 'chore', 'chore_sweep');
 select throws_ok(
-  $$select * from public.issue_reward_challenge('outdoor', 'outdoor_walk')$$,
+  $$select public.record_local_verification_attempt('60000000-0000-0000-0000-000000000002', 'chore', 'chore_sweep')$$,
+  'P0001', 'VERIFICATION_ALREADY_RECORDED',
+  'one verified chore attempt per quest and Bangkok day is enforced'
+);
+insert into wallet_test_attempts (name, id)
+select 'outdoor-one', public.record_local_verification_attempt('60000000-0000-0000-0000-000000000003', 'outdoor', 'outdoor_walk');
+insert into wallet_test_challenges (name, nonce)
+select 'chore', nonce from public.issue_reward_challenge('chore', (select id::text from wallet_test_attempts where name = 'chore'));
+select throws_ok(
+  $$select * from public.issue_reward_challenge('outdoor', (select id::text from wallet_test_attempts where name = 'outdoor-one'))$$,
   'P0001', 'CHALLENGE_ACTIVE',
   'only one active reward challenge is allowed'
 );
@@ -153,12 +167,12 @@ select results_eq(
 select is((select count(*)::integer from public.coin_ledger where request_id = '30000000-0000-0000-0000-000000000001'), 1, 'reward replay writes one ledger row');
 
 select throws_ok(
-  $$select * from public.issue_reward_challenge('outdoor', 'outdoor-not-real')$$,
+  $$select public.record_local_verification_attempt('60000000-0000-0000-0000-000000000004', 'outdoor', 'outdoor-not-real')$$,
   'P0001', 'INVALID_REWARD_SOURCE',
   'invalid outdoor quest IDs cannot mint coins'
 );
 insert into wallet_test_challenges (name, nonce)
-select 'outdoor-one', nonce from public.issue_reward_challenge('outdoor', 'outdoor_walk');
+select 'outdoor-one', nonce from public.issue_reward_challenge('outdoor', (select id::text from wallet_test_attempts where name = 'outdoor-one'));
 select results_eq(
   $$select balance, replayed from public.record_outdoor_completion('50000000-0000-0000-0000-000000000002', (select nonce from wallet_test_challenges where name = 'outdoor-one'))$$,
   $$values (110::integer, false)$$,
@@ -170,22 +184,72 @@ select results_eq(
   'outdoor completion retry is idempotent'
 );
 select is((select count(*)::integer from public.coin_ledger where request_id = '50000000-0000-0000-0000-000000000002'), 1, 'outdoor retry writes one ledger row');
+insert into wallet_test_attempts (name, id)
+select 'outdoor-two', public.record_local_verification_attempt('60000000-0000-0000-0000-000000000005', 'outdoor', 'outdoor_water_plants');
 insert into wallet_test_challenges (name, nonce)
-select 'outdoor-two', nonce from public.issue_reward_challenge('outdoor', 'outdoor_water_plants');
+select 'outdoor-two', nonce from public.issue_reward_challenge('outdoor', (select id::text from wallet_test_attempts where name = 'outdoor-two'));
 select lives_ok(
   $$select * from public.record_outdoor_completion('50000000-0000-0000-0000-000000000003', (select nonce from wallet_test_challenges where name = 'outdoor-two'))$$,
   'second outdoor reward consumes an issued challenge'
 );
+insert into wallet_test_attempts (name, id)
+select 'outdoor-three', public.record_local_verification_attempt('60000000-0000-0000-0000-000000000006', 'outdoor', 'outdoor_sweep');
 insert into wallet_test_challenges (name, nonce)
-select 'outdoor-three', nonce from public.issue_reward_challenge('outdoor', 'outdoor_sweep');
+select 'outdoor-three', nonce from public.issue_reward_challenge('outdoor', (select id::text from wallet_test_attempts where name = 'outdoor-three'));
 select lives_ok(
   $$select * from public.record_outdoor_completion('50000000-0000-0000-0000-000000000004', (select nonce from wallet_test_challenges where name = 'outdoor-three'))$$,
   'third outdoor reward consumes an issued challenge'
 );
+insert into wallet_test_attempts (name, id)
+select 'outdoor-four', public.record_local_verification_attempt('60000000-0000-0000-0000-000000000007', 'outdoor', 'outdoor_collect_leaves');
 select throws_ok(
-  $$select * from public.issue_reward_challenge('outdoor', 'outdoor_collect_leaves')$$,
+  $$select * from public.issue_reward_challenge('outdoor', (select id::text from wallet_test_attempts where name = 'outdoor-four'))$$,
   'P0001', 'OUTDOOR_DAILY_QUOTA_REACHED',
   'outdoor daily reward quota is enforced'
+);
+
+insert into wallet_test_attempts (name, id)
+select 'expired-one', public.record_local_verification_attempt('60000000-0000-0000-0000-000000000008', 'chore', 'chore_dishes');
+insert into wallet_test_challenges (name, nonce)
+select 'expired-one', nonce from public.issue_reward_challenge('chore', (select id::text from wallet_test_attempts where name = 'expired-one'));
+update public.reward_challenges
+set expires_at = clock_timestamp() - interval '1 second'
+where nonce = (select nonce from wallet_test_challenges where name = 'expired-one');
+insert into wallet_test_challenges (name, nonce)
+select 'expired-two', nonce from public.issue_reward_challenge('chore', (select id::text from wallet_test_attempts where name = 'expired-one'));
+select isnt(
+  (select nonce from wallet_test_challenges where name = 'expired-one'),
+  (select nonce from wallet_test_challenges where name = 'expired-two'),
+  'expired unconsumed challenge is replaced by a new nonce'
+);
+
+select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-000000000012', true);
+set local role authenticated;
+select results_eq(
+  $$select public.start_focus_reward_session('70000000-0000-0000-0000-000000000001', 30)$$,
+  $$values ('70000000-0000-0000-0000-000000000001'::uuid)$$,
+  'server starts an in-progress focus reward session'
+);
+reset role;
+select throws_ok(
+  $$select * from public.issue_reward_challenge('focus', '70000000-0000-0000-0000-000000000001')$$,
+  'P0001', 'FOCUS_NOT_COMPLETE',
+  'fresh server-started focus session cannot issue a reward challenge'
+);
+update public.focus_sessions
+set started_at = clock_timestamp() - interval '31 minutes'
+where id = '70000000-0000-0000-0000-000000000001';
+insert into wallet_test_challenges (name, nonce)
+select 'focus', nonce from public.issue_reward_challenge('focus', '70000000-0000-0000-0000-000000000001');
+select results_eq(
+  $$select balance, replayed from public.record_focus_completion('70000000-0000-0000-0000-000000000002', (select nonce from wallet_test_challenges where name = 'focus'))$$,
+  $$values (40::integer, false)$$,
+  'elapsed focus challenge credits once'
+);
+select is(
+  (select status from public.focus_sessions where id = '70000000-0000-0000-0000-000000000001'),
+  'completed',
+  'focus reward consumption completes the same server-started source row'
 );
 
 select lives_ok(

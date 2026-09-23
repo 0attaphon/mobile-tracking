@@ -57,6 +57,11 @@ create index student_inventory_source_ledger_idx
 alter table public.focus_sessions
   add column wallet_ledger_id uuid references public.coin_ledger (id) on delete restrict;
 
+alter table public.focus_sessions
+  drop constraint focus_sessions_status_check,
+  add constraint focus_sessions_status_check
+    check (status in ('in_progress', 'completed', 'failed', 'cancelled'));
+
 alter table public.chore_completions
   add column wallet_ledger_id uuid references public.coin_ledger (id) on delete restrict;
 
@@ -78,6 +83,19 @@ create type public.reward_challenge_result as (
   replayed boolean
 );
 
+-- The app records this only after its local camera/image verifier succeeds.
+-- The server cannot validate images because they are deliberately never
+-- uploaded, but it can make the verified attempt single-use and date-bound.
+create table public.client_verification_attempts (
+  id uuid primary key,
+  student_id uuid not null references public.students (id) on delete cascade,
+  reward_type text not null check (reward_type in ('chore', 'outdoor')),
+  quest_id text not null,
+  source_date date not null,
+  recorded_at timestamptz not null default now(),
+  unique (student_id, reward_type, quest_id, source_date)
+);
+
 -- A challenge is issued immediately before a locally verified activity is
 -- recorded. Its nonce is opaque to source-writing RPCs and expires quickly.
 create table public.reward_challenges (
@@ -87,6 +105,7 @@ create table public.reward_challenges (
   source_id text not null,
   source_date date not null,
   expected_duration integer,
+  verification_attempt_id uuid references public.client_verification_attempts (id) on delete restrict,
   issued_at timestamptz not null default now(),
   expires_at timestamptz not null,
   consumed_at timestamptz,
@@ -94,6 +113,10 @@ create table public.reward_challenges (
   constraint reward_challenges_focus_duration check (
     (reward_type = 'focus' and expected_duration is not null)
     or (reward_type <> 'focus' and expected_duration is null)
+  ),
+  constraint reward_challenges_verification_binding check (
+    (reward_type = 'focus' and verification_attempt_id is null)
+    or (reward_type <> 'focus' and verification_attempt_id is not null)
   )
 );
 
@@ -514,6 +537,54 @@ begin
 end;
 $$;
 
+create or replace function public.record_local_verification_attempt(
+  p_attempt_id uuid,
+  p_reward_type text,
+  p_quest_id text
+)
+returns uuid
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_student_id uuid := auth.uid();
+  v_existing public.client_verification_attempts%rowtype;
+  v_quest_id text := trim(coalesce(p_quest_id, ''));
+  v_date date := (clock_timestamp() at time zone 'Asia/Bangkok')::date;
+begin
+  if v_student_id is null then raise exception 'NOT_AUTHENTICATED'; end if;
+  if p_attempt_id is null or p_reward_type not in ('chore', 'outdoor')
+    or public.reward_coins_for_source(p_reward_type, v_quest_id) is null then
+    raise exception 'INVALID_REWARD_SOURCE';
+  end if;
+
+  select * into v_existing from public.client_verification_attempts where id = p_attempt_id for update;
+  if found then
+    if v_existing.student_id <> v_student_id
+      or v_existing.reward_type <> p_reward_type
+      or v_existing.quest_id <> v_quest_id then
+      raise exception 'IDEMPOTENCY_CONFLICT';
+    end if;
+    return p_attempt_id;
+  end if;
+
+  if exists (
+    select 1 from public.client_verification_attempts
+    where student_id = v_student_id
+      and reward_type = p_reward_type
+      and quest_id = v_quest_id
+      and source_date = v_date
+  ) then
+    raise exception 'VERIFICATION_ALREADY_RECORDED';
+  end if;
+
+  insert into public.client_verification_attempts (id, student_id, reward_type, quest_id, source_date)
+  values (p_attempt_id, v_student_id, p_reward_type, v_quest_id, v_date);
+  return p_attempt_id;
+end;
+$$;
+
 create or replace function public.issue_reward_challenge(
   p_reward_type text,
   p_source_id text
@@ -529,11 +600,13 @@ declare
   v_active public.reward_challenges%rowtype;
   v_challenge public.reward_challenges%rowtype;
   v_focus public.focus_sessions%rowtype;
+  v_attempt public.client_verification_attempts%rowtype;
   v_transaction_type text;
   v_source_id text := trim(coalesce(p_source_id, ''));
   v_source_uuid uuid;
   v_source_date date;
   v_expected_duration integer;
+  v_verification_attempt_id uuid;
 begin
   if v_student_id is null then
     raise exception 'NOT_AUTHENTICATED';
@@ -547,20 +620,8 @@ begin
     raise exception 'STUDENT_NOT_FOUND';
   end if;
   update public.reward_challenges
-  set expires_at = now()
-  where student_id = v_student_id and consumed_at is null and expires_at < now();
-  select * into v_active
-  from public.reward_challenges
-  where student_id = v_student_id and consumed_at is null and expires_at >= now()
-  order by issued_at desc
-  limit 1
-  for update;
-  if found then
-    if v_active.reward_type = p_reward_type and v_active.source_id = v_source_id then
-      return (v_active.nonce, v_active.expires_at, true);
-    end if;
-    raise exception 'CHALLENGE_ACTIVE';
-  end if;
+  set expires_at = clock_timestamp()
+  where student_id = v_student_id and consumed_at is null and expires_at <= clock_timestamp();
 
   v_transaction_type := p_reward_type || '_reward';
   if p_reward_type = 'focus' then
@@ -573,24 +634,30 @@ begin
     where id = v_source_uuid and student_id = v_student_id
     for update;
     if not found or v_focus.started_at is null
-      or now() < v_focus.started_at + make_interval(mins => v_focus.duration_minutes) then
+      or clock_timestamp() < v_focus.started_at + make_interval(mins => v_focus.duration_minutes) then
       raise exception 'FOCUS_NOT_COMPLETE';
     end if;
-    if v_focus.status = 'in_progress' then
-      update public.focus_sessions
-      set status = 'completed', ended_at = now()
-      where id = v_source_uuid;
-      v_focus.ended_at := now();
-    elsif v_focus.status <> 'completed' then
+    if v_focus.status not in ('in_progress', 'completed') then
       raise exception 'FOCUS_NOT_COMPLETE';
     end if;
-    v_source_date := (coalesce(v_focus.ended_at, now()) at time zone 'Asia/Bangkok')::date;
+    v_source_date := (coalesce(v_focus.ended_at, clock_timestamp()) at time zone 'Asia/Bangkok')::date;
     v_expected_duration := v_focus.duration_minutes;
   else
-    if public.reward_coins_for_source(p_reward_type, v_source_id) is null then
+    if v_source_id !~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' then
       raise exception 'INVALID_REWARD_SOURCE';
     end if;
-    v_source_date := (now() at time zone 'Asia/Bangkok')::date;
+    select * into v_attempt
+    from public.client_verification_attempts
+    where id = v_source_id::uuid
+      and student_id = v_student_id
+      and reward_type = p_reward_type
+    for update;
+    if not found then
+      raise exception 'VERIFICATION_NOT_FOUND';
+    end if;
+    v_verification_attempt_id := v_attempt.id;
+    v_source_id := v_attempt.quest_id;
+    v_source_date := v_attempt.source_date;
     if p_reward_type = 'outdoor' and (
       select count(*) from public.coin_ledger
       where student_id = v_student_id
@@ -599,6 +666,21 @@ begin
     ) >= 3 then
       raise exception 'OUTDOOR_DAILY_QUOTA_REACHED';
     end if;
+  end if;
+
+  select * into v_active
+  from public.reward_challenges
+  where student_id = v_student_id and consumed_at is null and expires_at > clock_timestamp()
+  order by issued_at desc
+  limit 1
+  for update;
+  if found then
+    if v_active.reward_type = p_reward_type
+      and v_active.source_id = v_source_id
+      and v_active.verification_attempt_id is not distinct from v_verification_attempt_id then
+      return (v_active.nonce, v_active.expires_at, true);
+    end if;
+    raise exception 'CHALLENGE_ACTIVE';
   end if;
 
   if exists (
@@ -612,10 +694,11 @@ begin
   end if;
 
   insert into public.reward_challenges (
-    student_id, reward_type, source_id, source_date, expected_duration, expires_at
+    student_id, reward_type, source_id, source_date, expected_duration,
+    verification_attempt_id, expires_at
   ) values (
     v_student_id, p_reward_type, v_source_id, v_source_date, v_expected_duration,
-    now() + interval '10 minutes'
+    v_verification_attempt_id, clock_timestamp() + interval '10 minutes'
   ) returning * into v_challenge;
   return (v_challenge.nonce, v_challenge.expires_at, false);
 end;
@@ -647,7 +730,13 @@ begin
     if v_ledger.request_id = p_request_id then return (v_ledger.balance_after, v_ledger.id, true); end if;
     raise exception 'IDEMPOTENCY_CONFLICT';
   end if;
-  if v_challenge.expires_at < now() then raise exception 'CHALLENGE_EXPIRED'; end if;
+  if v_challenge.expires_at <= clock_timestamp() then raise exception 'CHALLENGE_EXPIRED'; end if;
+  update public.focus_sessions
+  set status = 'completed', ended_at = coalesce(ended_at, clock_timestamp())
+  where id = v_challenge.source_id::uuid
+    and student_id = v_student_id
+    and status in ('in_progress', 'completed');
+  if not found then raise exception 'FOCUS_NOT_COMPLETE'; end if;
   v_result := public.claim_student_reward(p_request_id, 'focus', v_challenge.source_id, null);
   update public.reward_challenges set consumed_at = now(), ledger_id = v_result.ledger_id where nonce = p_challenge_nonce;
   return v_result;
@@ -680,7 +769,7 @@ begin
     if v_ledger.request_id = p_request_id then return (v_ledger.balance_after, v_ledger.id, true); end if;
     raise exception 'IDEMPOTENCY_CONFLICT';
   end if;
-  if v_challenge.expires_at < now() then raise exception 'CHALLENGE_EXPIRED'; end if;
+  if v_challenge.expires_at <= clock_timestamp() then raise exception 'CHALLENGE_EXPIRED'; end if;
   insert into public.chore_completions (id, student_id, quest_id, date, coins_earned, completed_at)
   values (v_challenge.nonce, v_student_id, v_challenge.source_id, v_challenge.source_date, 0, now());
   v_result := public.claim_student_reward(p_request_id, 'chore', v_challenge.nonce::text, null);
@@ -715,7 +804,7 @@ begin
     if v_ledger.request_id = p_request_id then return (v_ledger.balance_after, v_ledger.id, true); end if;
     raise exception 'IDEMPOTENCY_CONFLICT';
   end if;
-  if v_challenge.expires_at < now() then raise exception 'CHALLENGE_EXPIRED'; end if;
+  if v_challenge.expires_at <= clock_timestamp() then raise exception 'CHALLENGE_EXPIRED'; end if;
   insert into public.outdoor_completions (id, student_id, quest_id, date)
   values (v_challenge.nonce, v_student_id, v_challenge.source_id, v_challenge.source_date);
   v_result := public.claim_student_reward(p_request_id, 'outdoor', v_challenge.nonce::text, null);
@@ -783,6 +872,7 @@ begin
     update public.daily_usage set student_id = v_uid where student_id = v_existing.id;
     update public.chore_completions set student_id = v_uid where student_id = v_existing.id;
     update public.outdoor_completions set student_id = v_uid where student_id = v_existing.id;
+    update public.client_verification_attempts set student_id = v_uid where student_id = v_existing.id;
     update public.reward_challenges set student_id = v_uid where student_id = v_existing.id;
     update public.coin_ledger set student_id = v_uid where student_id = v_existing.id;
     update public.student_inventory set student_id = v_uid where student_id = v_existing.id;
@@ -1009,6 +1099,7 @@ alter table public.student_inventory enable row level security;
 alter table public.shop_catalog_versions enable row level security;
 alter table public.shop_catalog_items enable row level security;
 alter table public.outdoor_completions enable row level security;
+alter table public.client_verification_attempts enable row level security;
 alter table public.reward_challenges enable row level security;
 
 -- The previous broad update policy made coins writable by any owner or admin.
@@ -1034,7 +1125,7 @@ create policy student_inventory_select_own on public.student_inventory
 -- security-definer RPCs above.
 revoke all on table public.coin_ledger, public.student_inventory,
   public.shop_catalog_versions, public.shop_catalog_items, public.outdoor_completions,
-  public.reward_challenges
+  public.client_verification_attempts, public.reward_challenges
   from public, anon, authenticated;
 grant select on table public.coin_ledger, public.student_inventory to authenticated;
 
@@ -1047,6 +1138,7 @@ revoke all on function public.reward_coins_for_source(text, text) from public, a
 revoke all on function public.admin_deduct_student_coins(text, integer, uuid, integer) from public, anon, authenticated;
 revoke all on function public.claim_student_reward(uuid, text, text, date) from public, anon, authenticated;
 revoke all on function public.start_focus_reward_session(uuid, integer) from public, anon, authenticated;
+revoke all on function public.record_local_verification_attempt(uuid, text, text) from public, anon, authenticated;
 revoke all on function public.issue_reward_challenge(text, text) from public, anon, authenticated;
 revoke all on function public.record_focus_completion(uuid, uuid) from public, anon, authenticated;
 revoke all on function public.record_chore_completion(uuid, uuid) from public, anon, authenticated;
@@ -1057,6 +1149,7 @@ revoke all on function public.get_my_wallet() from public, anon, authenticated;
 revoke all on function public.get_my_coin_history(integer) from public, anon, authenticated;
 grant execute on function public.admin_deduct_student_coins(text, integer, uuid, integer) to authenticated;
 grant execute on function public.start_focus_reward_session(uuid, integer) to authenticated;
+grant execute on function public.record_local_verification_attempt(uuid, text, text) to authenticated;
 grant execute on function public.issue_reward_challenge(text, text) to authenticated;
 grant execute on function public.record_focus_completion(uuid, uuid) to authenticated;
 grant execute on function public.record_chore_completion(uuid, uuid) to authenticated;
