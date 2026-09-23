@@ -550,6 +550,8 @@ begin
     raise exception 'INVALID_REWARD_SOURCE';
   end if;
 
+  -- Focus RPCs acquire locks in the same order: student, focus source, then
+  -- reward challenge. PostgreSQL retains these row locks until transaction end.
   perform 1 from public.students where id = v_student_id for update;
   if not found then
     raise exception 'STUDENT_NOT_FOUND';
@@ -602,6 +604,11 @@ begin
     raise exception 'INVALID_REWARD_SOURCE';
   end if;
 
+  perform 1 from public.students where id = v_student_id for update;
+  if not found then
+    raise exception 'STUDENT_NOT_FOUND';
+  end if;
+
   select * into v_focus
   from public.focus_sessions
   where id = p_source_id and student_id = v_student_id
@@ -609,6 +616,14 @@ begin
   if not found then
     raise exception 'FOCUS_SESSION_NOT_FOUND';
   end if;
+
+  perform 1 from public.reward_challenges
+  where student_id = v_student_id
+    and reward_type = 'focus'
+    and source_id = p_source_id::text
+    and consumed_at is null
+  for update;
+
   if v_focus.status = 'cancelled' then
     return p_source_id;
   end if;
@@ -792,9 +807,11 @@ begin
   if not found then
     raise exception 'STUDENT_NOT_FOUND';
   end if;
-  update public.reward_challenges
-  set expires_at = clock_timestamp()
-  where student_id = v_student_id and consumed_at is null and expires_at <= clock_timestamp();
+  if p_reward_type <> 'focus' then
+    update public.reward_challenges
+    set expires_at = clock_timestamp()
+    where student_id = v_student_id and consumed_at is null and expires_at <= clock_timestamp();
+  end if;
 
   v_transaction_type := p_reward_type || '_reward';
   if p_reward_type = 'focus' then
@@ -815,6 +832,9 @@ begin
     end if;
     v_source_date := (coalesce(v_focus.ended_at, clock_timestamp()) at time zone 'Asia/Bangkok')::date;
     v_expected_duration := v_focus.duration_minutes;
+    update public.reward_challenges
+    set expires_at = clock_timestamp()
+    where student_id = v_student_id and consumed_at is null and expires_at <= clock_timestamp();
   else
     if v_source_id !~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' then
       raise exception 'INVALID_REWARD_SOURCE';
@@ -895,6 +915,8 @@ declare
 begin
   if v_student_id is null then raise exception 'NOT_AUTHENTICATED'; end if;
   if p_request_id is null or p_challenge_nonce is null then raise exception 'INVALID_REQUEST_ID'; end if;
+  perform 1 from public.students where id = v_student_id for update;
+  if not found then raise exception 'STUDENT_NOT_FOUND'; end if;
   select * into v_challenge from public.reward_challenges
   where nonce = p_challenge_nonce and student_id = v_student_id;
   if not found then raise exception 'CHALLENGE_NOT_FOUND'; end if;
