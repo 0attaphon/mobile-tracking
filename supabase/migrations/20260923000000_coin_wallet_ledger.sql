@@ -1,0 +1,603 @@
+-- Authoritative, append-only wallet ledger. Every confirmed coin change passes
+-- through the RPCs below so a balance, audit entry, and inventory update agree.
+
+create type public.wallet_transaction_result as (
+  balance integer,
+  ledger_id uuid,
+  replayed boolean
+);
+
+create table public.coin_ledger (
+  id uuid primary key default gen_random_uuid(),
+  request_id uuid not null unique,
+  student_id uuid not null references public.students (id) on delete cascade,
+  transaction_type text not null check (transaction_type in (
+    'focus_reward',
+    'chore_reward',
+    'outdoor_reward',
+    'shop_purchase',
+    'admin_deduction',
+    'legacy_import'
+  )),
+  delta integer not null,
+  balance_before integer not null,
+  balance_after integer not null,
+  actor_user_id uuid references auth.users (id) on delete set null,
+  source_id text,
+  source_date date,
+  metadata jsonb not null default '{}'::jsonb,
+  created_at timestamptz not null default now(),
+  constraint coin_ledger_balance_non_negative check (balance_after >= 0),
+  constraint coin_ledger_balance_math check (balance_after = balance_before + delta)
+);
+
+create index coin_ledger_student_created_at_idx
+  on public.coin_ledger (student_id, created_at desc);
+
+-- A reward source may only be claimed once for a student on a source date,
+-- regardless of which request UUID reaches the server first.
+create unique index coin_ledger_reward_source_once_idx
+  on public.coin_ledger (student_id, transaction_type, source_id, source_date)
+  where transaction_type in ('focus_reward', 'chore_reward', 'outdoor_reward');
+
+create table public.student_inventory (
+  student_id uuid not null references public.students (id) on delete cascade,
+  item_id text not null,
+  acquired_at timestamptz not null default now(),
+  source_ledger_id uuid not null references public.coin_ledger (id) on delete restrict,
+  primary key (student_id, item_id)
+);
+
+create index student_inventory_source_ledger_idx
+  on public.student_inventory (source_ledger_id);
+
+create table public.shop_catalog_versions (
+  version integer primary key,
+  active boolean not null default false,
+  created_at timestamptz not null default now()
+);
+
+create unique index shop_catalog_versions_one_active_idx
+  on public.shop_catalog_versions ((active)) where active;
+
+create table public.shop_catalog_items (
+  version integer not null references public.shop_catalog_versions (version) on delete cascade,
+  item_id text not null,
+  price integer not null check (price > 0),
+  active boolean not null default true,
+  primary key (version, item_id)
+);
+
+insert into public.shop_catalog_versions (version, active) values (1, true);
+
+insert into public.shop_catalog_items (version, item_id, price) values
+  (1, 'hat_school', 60),
+  (1, 'glasses_sun', 90),
+  (1, 'hat_straw', 60),
+  (1, 'hat_tophat', 150),
+  (1, 'hat_beret_brown', 70),
+  (1, 'hat_bucket', 65),
+  (1, 'hat_beanie_purple', 80),
+  (1, 'hat_beret_apple', 135),
+  (1, 'hat_flower_crown', 155),
+  (1, 'hat_cap_bow', 85),
+  (1, 'hat_cat_ears', 145),
+  (1, 'hat_cap_fish', 80),
+  (1, 'hat_beret_blue', 75),
+  (1, 'hat_crown_gold', 455),
+  (1, 'hat_bear_hood', 135),
+  (1, 'outfit_raincoat', 170),
+  (1, 'outfit_tuxedo', 425),
+  (1, 'outfit_coat', 155),
+  (1, 'glasses_round', 85),
+  (1, 'outfit_uniform', 145),
+  (1, 'outfit_imperial_cloak', 470),
+  (1, 'outfit_cosmic_cape', 435),
+  (1, 'outfit_royal_robe', 515),
+  (1, 'outfit_astronaut', 180),
+  (1, 'outfit_dino', 155),
+  (1, 'hat_ninja', 145),
+  (1, 'hat_halo', 395),
+  (1, 'hat_pirate', 155),
+  (1, 'outfit_doctor', 170),
+  (1, 'outfit_angel', 455),
+  (1, 'outfit_ninja', 180),
+  (1, 'outfit_samurai', 435),
+  (1, 'outfit_maid', 155),
+  (1, 'outfit_naval_captain', 425),
+  (1, 'outfit_pirate', 170),
+  (1, 'outfit_princess_pink', 410),
+  (1, 'outfit_princess_gold', 425),
+  (1, 'outfit_princess_blue', 410),
+  (1, 'bg_sky', 30),
+  (1, 'bg_pink', 30),
+  (1, 'bg_mint', 30),
+  (1, 'bg_lavender', 30),
+  (1, 'bg_peach', 35),
+  (1, 'bg_ocean', 120),
+  (1, 'bg_sunset', 120),
+  (1, 'bg_galaxy', 335),
+  (1, 'bg_rainbow', 365),
+  (1, 'bg_cotton_candy', 55),
+  (1, 'bg_mango', 55),
+  (1, 'bg_watermelon', 55),
+  (1, 'bg_lemonade', 55),
+  (1, 'bg_mint_choco', 55),
+  (1, 'bg_morning_sky', 55),
+  (1, 'bg_flamingo', 55),
+  (1, 'bg_ice', 55),
+  (1, 'bg_cherry', 55),
+  (1, 'bg_bubblegum', 55),
+  (1, 'bg_aurora', 110),
+  (1, 'bg_grape_soda', 110),
+  (1, 'bg_night_mist', 135),
+  (1, 'bg_forest', 110),
+  (1, 'bg_volcano', 135),
+  (1, 'bg_desert', 120),
+  (1, 'bg_twilight', 110),
+  (1, 'bg_deep_space', 300),
+  (1, 'bg_cyber', 290),
+  (1, 'bg_emerald', 270),
+  (1, 'pet_dog', 70),
+  (1, 'pet_orange_cat', 90);
+
+create or replace function public.reward_coins_for_source(
+  p_reward_type text,
+  p_source_id text
+)
+returns integer
+language plpgsql
+immutable
+set search_path = public
+as $$
+declare
+  v_duration integer;
+begin
+  if p_reward_type = 'focus' then
+    -- Focus clients include the duration in the source ID, for example
+    -- "focus:60:<session-id>". The legacy concise forms are accepted during
+    -- the transition so a request still contains no client-controlled delta.
+    v_duration := nullif(
+      coalesce(
+        substring(p_source_id from '^focus:(30|60|120|180|240)(?::|$)'),
+        substring(p_source_id from '^focus_(30|60|120|180|240)(?:_|$)'),
+        substring(p_source_id from '^(30|60|120|180|240)$')
+      ),
+      ''
+    )::integer;
+    return case v_duration
+      when 30 then 15
+      when 60 then 40
+      when 120 then 100
+      when 180 then 160
+      when 240 then 240
+      else null
+    end;
+  end if;
+
+  if p_reward_type = 'chore' then
+    return case p_source_id
+      when 'chore_sweep', 'chore_dishes', 'chore_desk', 'chore_laundry',
+           'chore_water_plants', 'chore_make_bed', 'chore_sort_laundry_basket',
+           'chore_clean_shoes', 'chore_vacuum', 'chore_trash',
+           'chore_organize_closet', 'chore_clean_fan',
+           'chore_organize_bookshelf', 'chore_pack_toys', 'chore_feed_pet'
+        then 25
+      when 'chore_fold_towel', 'chore_wipe_mirror',
+           'chore_wipe_dining_table', 'chore_wash_bottle', 'chore_pack_bag',
+           'chore_put_away_dishes', 'chore_arrange_pillows',
+           'chore_wipe_window' then 15
+      when 'chore_sweep_leaves', 'chore_clean_bathroom', 'chore_mop_floor'
+        then 40
+      else null
+    end;
+  end if;
+
+  if p_reward_type = 'outdoor' then
+    return case p_source_id
+      when 'outdoor_water_plants', 'outdoor_sweep', 'outdoor_collect_leaves',
+           'outdoor_stretch', 'outdoor_walk', 'outdoor_balance',
+           'outdoor_tidy_corner' then 25
+      when 'outdoor_nature', 'outdoor_read', 'outdoor_tree' then 20
+      else null
+    end;
+  end if;
+
+  return null;
+end;
+$$;
+
+create or replace function public.admin_deduct_student_coins(
+  p_student_code text,
+  p_amount integer,
+  p_request_id uuid,
+  p_expected_balance integer
+)
+returns public.wallet_transaction_result
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_actor_id uuid := auth.uid();
+  v_student public.students%rowtype;
+  v_existing public.coin_ledger%rowtype;
+  v_student_code text := trim(coalesce(p_student_code, ''));
+  v_balance_after integer;
+  v_ledger_id uuid;
+begin
+  if v_actor_id is null or not public.is_admin() then
+    raise exception 'ADMIN_REQUIRED';
+  end if;
+  if p_request_id is null then
+    raise exception 'INVALID_REQUEST_ID';
+  end if;
+  if p_amount is null or p_amount <= 0 then
+    raise exception 'INVALID_AMOUNT';
+  end if;
+
+  select * into v_student
+  from public.students
+  where student_id = v_student_code
+  for update;
+  if not found then
+    raise exception 'STUDENT_NOT_FOUND';
+  end if;
+
+  select * into v_existing
+  from public.coin_ledger
+  where request_id = p_request_id;
+  if found then
+    if v_existing.transaction_type <> 'admin_deduction'
+      or v_existing.student_id <> v_student.id
+      or v_existing.delta <> -p_amount
+      or v_existing.balance_before <> p_expected_balance
+      or v_existing.actor_user_id is distinct from v_actor_id
+      or v_existing.source_id is distinct from v_student_code then
+      raise exception 'IDEMPOTENCY_CONFLICT';
+    end if;
+    return (v_existing.balance_after, v_existing.id, true);
+  end if;
+
+  if p_expected_balance is null or v_student.coins <> p_expected_balance then
+    raise exception 'BALANCE_CHANGED';
+  end if;
+  v_balance_after := v_student.coins - p_amount;
+  if v_balance_after < 0 then
+    raise exception 'INSUFFICIENT_COINS';
+  end if;
+
+  update public.students set coins = v_balance_after where id = v_student.id;
+  insert into public.coin_ledger (
+    request_id, student_id, transaction_type, delta, balance_before,
+    balance_after, actor_user_id, source_id, metadata
+  ) values (
+    p_request_id, v_student.id, 'admin_deduction', -p_amount, v_student.coins,
+    v_balance_after, v_actor_id, v_student_code,
+    jsonb_build_object('student_code', v_student_code, 'expected_balance', p_expected_balance)
+  ) returning id into v_ledger_id;
+
+  return (v_balance_after, v_ledger_id, false);
+end;
+$$;
+
+create or replace function public.claim_student_reward(
+  p_request_id uuid,
+  p_reward_type text,
+  p_source_id text,
+  p_source_date date
+)
+returns public.wallet_transaction_result
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_student_id uuid := auth.uid();
+  v_student public.students%rowtype;
+  v_existing public.coin_ledger%rowtype;
+  v_transaction_type text;
+  v_delta integer;
+  v_balance_after integer;
+  v_ledger_id uuid;
+begin
+  if v_student_id is null then
+    raise exception 'NOT_AUTHENTICATED';
+  end if;
+  if p_request_id is null then
+    raise exception 'INVALID_REQUEST_ID';
+  end if;
+  if p_source_id is null or trim(p_source_id) = '' or p_source_date is null then
+    raise exception 'INVALID_REWARD_SOURCE';
+  end if;
+
+  v_transaction_type := case p_reward_type
+    when 'focus' then 'focus_reward'
+    when 'chore' then 'chore_reward'
+    when 'outdoor' then 'outdoor_reward'
+    else null
+  end;
+  if v_transaction_type is null then
+    raise exception 'INVALID_REWARD_TYPE';
+  end if;
+  v_delta := public.reward_coins_for_source(p_reward_type, p_source_id);
+  if v_delta is null then
+    raise exception 'INVALID_REWARD_SOURCE';
+  end if;
+
+  select * into v_student from public.students where id = v_student_id for update;
+  if not found then
+    raise exception 'STUDENT_NOT_FOUND';
+  end if;
+  select * into v_existing from public.coin_ledger where request_id = p_request_id;
+  if found then
+    if v_existing.transaction_type <> v_transaction_type
+      or v_existing.student_id <> v_student_id
+      or v_existing.delta <> v_delta
+      or v_existing.source_id is distinct from p_source_id
+      or v_existing.source_date is distinct from p_source_date
+      or v_existing.actor_user_id is not null then
+      raise exception 'IDEMPOTENCY_CONFLICT';
+    end if;
+    return (v_existing.balance_after, v_existing.id, true);
+  end if;
+
+  if exists (
+    select 1 from public.coin_ledger
+    where student_id = v_student_id
+      and transaction_type = v_transaction_type
+      and source_id = p_source_id
+      and source_date = p_source_date
+  ) then
+    raise exception 'REWARD_ALREADY_CLAIMED';
+  end if;
+
+  v_balance_after := v_student.coins + v_delta;
+  update public.students set coins = v_balance_after where id = v_student_id;
+  insert into public.coin_ledger (
+    request_id, student_id, transaction_type, delta, balance_before,
+    balance_after, source_id, source_date, metadata
+  ) values (
+    p_request_id, v_student_id, v_transaction_type, v_delta, v_student.coins,
+    v_balance_after, p_source_id, p_source_date,
+    jsonb_build_object('reward_type', p_reward_type)
+  ) returning id into v_ledger_id;
+
+  return (v_balance_after, v_ledger_id, false);
+end;
+$$;
+
+create or replace function public.purchase_shop_item(
+  p_item_id text,
+  p_catalog_version integer,
+  p_request_id uuid
+)
+returns public.wallet_transaction_result
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_student_id uuid := auth.uid();
+  v_student public.students%rowtype;
+  v_existing public.coin_ledger%rowtype;
+  v_item_id text := trim(coalesce(p_item_id, ''));
+  v_price integer;
+  v_balance_after integer;
+  v_ledger_id uuid;
+begin
+  if v_student_id is null then
+    raise exception 'NOT_AUTHENTICATED';
+  end if;
+  if p_request_id is null then
+    raise exception 'INVALID_REQUEST_ID';
+  end if;
+  if v_item_id = '' or p_catalog_version is null then
+    raise exception 'INVALID_PURCHASE';
+  end if;
+
+  select * into v_student from public.students where id = v_student_id for update;
+  if not found then
+    raise exception 'STUDENT_NOT_FOUND';
+  end if;
+  select * into v_existing from public.coin_ledger where request_id = p_request_id;
+  if found then
+    if v_existing.transaction_type <> 'shop_purchase'
+      or v_existing.student_id <> v_student_id
+      or v_existing.source_id is distinct from v_item_id
+      or (v_existing.metadata ->> 'catalog_version') is distinct from p_catalog_version::text then
+      raise exception 'IDEMPOTENCY_CONFLICT';
+    end if;
+    return (v_existing.balance_after, v_existing.id, true);
+  end if;
+
+  select item.price into v_price
+  from public.shop_catalog_items item
+  join public.shop_catalog_versions catalog on catalog.version = item.version
+  where item.version = p_catalog_version
+    and item.item_id = v_item_id
+    and item.active
+    and catalog.active;
+  if v_price is null then
+    raise exception 'CATALOG_ITEM_UNAVAILABLE';
+  end if;
+  if exists (
+    select 1 from public.student_inventory
+    where student_id = v_student_id and item_id = v_item_id
+  ) then
+    raise exception 'ALREADY_OWNED';
+  end if;
+
+  v_balance_after := v_student.coins - v_price;
+  if v_balance_after < 0 then
+    raise exception 'INSUFFICIENT_COINS';
+  end if;
+  update public.students set coins = v_balance_after where id = v_student_id;
+  insert into public.coin_ledger (
+    request_id, student_id, transaction_type, delta, balance_before,
+    balance_after, source_id, metadata
+  ) values (
+    p_request_id, v_student_id, 'shop_purchase', -v_price, v_student.coins,
+    v_balance_after, v_item_id,
+    jsonb_build_object('item_id', v_item_id, 'catalog_version', p_catalog_version, 'price', v_price)
+  ) returning id into v_ledger_id;
+  insert into public.student_inventory (student_id, item_id, source_ledger_id)
+  values (v_student_id, v_item_id, v_ledger_id);
+
+  return (v_balance_after, v_ledger_id, false);
+end;
+$$;
+
+create or replace function public.import_legacy_inventory(
+  p_item_ids text[],
+  p_request_id uuid
+)
+returns public.wallet_transaction_result
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_student_id uuid := auth.uid();
+  v_student public.students%rowtype;
+  v_existing public.coin_ledger%rowtype;
+  v_item_ids text[];
+  v_unknown_item_id text;
+  v_ledger_id uuid;
+begin
+  if v_student_id is null then
+    raise exception 'NOT_AUTHENTICATED';
+  end if;
+  if p_request_id is null then
+    raise exception 'INVALID_REQUEST_ID';
+  end if;
+
+  select coalesce(array_agg(distinct item_id order by item_id), '{}'::text[])
+  into v_item_ids
+  from unnest(coalesce(p_item_ids, '{}'::text[])) as supplied(item_id)
+  where trim(supplied.item_id) <> '';
+  if cardinality(v_item_ids) = 0 then
+    raise exception 'INVALID_ITEMS';
+  end if;
+
+  select * into v_student from public.students where id = v_student_id for update;
+  if not found then
+    raise exception 'STUDENT_NOT_FOUND';
+  end if;
+  select * into v_existing from public.coin_ledger where request_id = p_request_id;
+  if found then
+    if v_existing.transaction_type <> 'legacy_import'
+      or v_existing.student_id <> v_student_id
+      or v_existing.metadata -> 'item_ids' is distinct from to_jsonb(v_item_ids) then
+      raise exception 'IDEMPOTENCY_CONFLICT';
+    end if;
+    return (v_existing.balance_after, v_existing.id, true);
+  end if;
+
+  select supplied.item_id into v_unknown_item_id
+  from unnest(v_item_ids) as supplied(item_id)
+  where not exists (
+    select 1 from public.shop_catalog_items item where item.item_id = supplied.item_id
+  )
+  limit 1;
+  if v_unknown_item_id is not null then
+    raise exception 'UNKNOWN_ITEM';
+  end if;
+
+  insert into public.coin_ledger (
+    request_id, student_id, transaction_type, delta, balance_before,
+    balance_after, source_id, source_date, metadata
+  ) values (
+    p_request_id, v_student_id, 'legacy_import', 0, v_student.coins,
+    v_student.coins, 'legacy_inventory', current_date,
+    jsonb_build_object('item_ids', v_item_ids)
+  ) returning id into v_ledger_id;
+
+  insert into public.student_inventory (student_id, item_id, source_ledger_id)
+  select v_student_id, supplied.item_id, v_ledger_id
+  from unnest(v_item_ids) as supplied(item_id)
+  on conflict (student_id, item_id) do nothing;
+
+  return (v_student.coins, v_ledger_id, false);
+end;
+$$;
+
+create or replace function public.get_my_wallet()
+returns table (balance integer)
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if auth.uid() is null then
+    raise exception 'NOT_AUTHENTICATED';
+  end if;
+
+  return query
+  select students.coins
+  from public.students
+  where students.id = auth.uid();
+end;
+$$;
+
+create or replace function public.get_my_coin_history(p_limit integer default 50)
+returns setof public.coin_ledger
+language plpgsql
+security definer
+set search_path = public
+as $$
+begin
+  if auth.uid() is null then
+    raise exception 'NOT_AUTHENTICATED';
+  end if;
+  if p_limit is null or p_limit < 1 or p_limit > 100 then
+    raise exception 'INVALID_LIMIT';
+  end if;
+
+  return query
+  select ledger.*
+  from public.coin_ledger ledger
+  where ledger.student_id = auth.uid()
+  order by ledger.created_at desc
+  limit p_limit;
+end;
+$$;
+
+alter table public.coin_ledger enable row level security;
+alter table public.student_inventory enable row level security;
+alter table public.shop_catalog_versions enable row level security;
+alter table public.shop_catalog_items enable row level security;
+
+create policy coin_ledger_select_own_or_admin on public.coin_ledger
+  for select to authenticated
+  using (student_id = auth.uid() or public.is_admin());
+
+create policy student_inventory_select_own on public.student_inventory
+  for select to authenticated
+  using (student_id = auth.uid());
+
+-- Clients only need their RLS-filtered read models; all writes are inside the
+-- security-definer RPCs above.
+revoke all on table public.coin_ledger, public.student_inventory,
+  public.shop_catalog_versions, public.shop_catalog_items from public, anon, authenticated;
+grant select on table public.coin_ledger, public.student_inventory to authenticated;
+
+revoke all on function public.reward_coins_for_source(text, text) from public, anon, authenticated;
+revoke all on function public.admin_deduct_student_coins(text, integer, uuid, integer) from public, anon, authenticated;
+revoke all on function public.claim_student_reward(uuid, text, text, date) from public, anon, authenticated;
+revoke all on function public.purchase_shop_item(text, integer, uuid) from public, anon, authenticated;
+revoke all on function public.import_legacy_inventory(text[], uuid) from public, anon, authenticated;
+revoke all on function public.get_my_wallet() from public, anon, authenticated;
+revoke all on function public.get_my_coin_history(integer) from public, anon, authenticated;
+grant execute on function public.admin_deduct_student_coins(text, integer, uuid, integer) to authenticated;
+grant execute on function public.claim_student_reward(uuid, text, text, date) to authenticated;
+grant execute on function public.purchase_shop_item(text, integer, uuid) to authenticated;
+grant execute on function public.import_legacy_inventory(text[], uuid) to authenticated;
+grant execute on function public.get_my_wallet() to authenticated;
+grant execute on function public.get_my_coin_history(integer) to authenticated;
+
+-- Legacy clients may still reference this function during the transition, but
+-- they cannot execute it. Remove the function after the compatible build is mandatory.
+revoke execute on function public.increment_student_coins(integer) from authenticated;
+comment on function public.increment_student_coins(integer) is
+  'Legacy delta RPC retained only for the migration window; remove after the compatible build is mandatory.';
