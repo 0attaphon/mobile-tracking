@@ -51,6 +51,27 @@ create table public.student_inventory (
 create index student_inventory_source_ledger_idx
   on public.student_inventory (source_ledger_id);
 
+-- Completed activities are the server-side evidence consumed by a reward
+-- claim. The claim RPC locks the row and records its ledger ID so a client
+-- cannot invent a source ID or claim the same completion through a new UUID.
+alter table public.focus_sessions
+  add column wallet_ledger_id uuid references public.coin_ledger (id) on delete restrict;
+
+alter table public.chore_completions
+  add column wallet_ledger_id uuid references public.coin_ledger (id) on delete restrict;
+
+create table public.outdoor_completions (
+  id uuid primary key default gen_random_uuid(),
+  student_id uuid not null references public.students (id) on delete cascade,
+  quest_id text not null,
+  date date not null,
+  completed_at timestamptz not null default now(),
+  wallet_ledger_id uuid references public.coin_ledger (id) on delete restrict
+);
+
+create index outdoor_completions_student_date_idx
+  on public.outdoor_completions (student_id, date);
+
 create table public.shop_catalog_versions (
   version integer primary key,
   active boolean not null default false,
@@ -296,7 +317,13 @@ declare
   v_student_id uuid := auth.uid();
   v_student public.students%rowtype;
   v_existing public.coin_ledger%rowtype;
+  v_focus public.focus_sessions%rowtype;
+  v_chore public.chore_completions%rowtype;
+  v_outdoor public.outdoor_completions%rowtype;
   v_transaction_type text;
+  v_source_id uuid;
+  v_source_date date;
+  v_source_ledger_id uuid;
   v_delta integer;
   v_balance_after integer;
   v_ledger_id uuid;
@@ -307,9 +334,12 @@ begin
   if p_request_id is null then
     raise exception 'INVALID_REQUEST_ID';
   end if;
-  if p_source_id is null or trim(p_source_id) = '' or p_source_date is null then
+  if p_source_id is null
+    or trim(p_source_id) = ''
+    or trim(p_source_id) !~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' then
     raise exception 'INVALID_REWARD_SOURCE';
   end if;
+  v_source_id := trim(p_source_id)::uuid;
 
   v_transaction_type := case p_reward_type
     when 'focus' then 'focus_reward'
@@ -320,35 +350,71 @@ begin
   if v_transaction_type is null then
     raise exception 'INVALID_REWARD_TYPE';
   end if;
-  v_delta := public.reward_coins_for_source(p_reward_type, p_source_id);
-  if v_delta is null then
-    raise exception 'INVALID_REWARD_SOURCE';
-  end if;
 
   select * into v_student from public.students where id = v_student_id for update;
   if not found then
     raise exception 'STUDENT_NOT_FOUND';
   end if;
+
+  -- p_source_date is retained for the mobile RPC signature but deliberately
+  -- ignored. Date, reward, ownership, and completion state come from the
+  -- locked server row below.
+  if p_reward_type = 'focus' then
+    select * into v_focus
+    from public.focus_sessions
+    where id = v_source_id
+      and student_id = v_student_id
+      and status = 'completed'
+    for update;
+    if not found then
+      raise exception 'REWARD_SOURCE_NOT_FOUND';
+    end if;
+    v_delta := public.reward_coins_for_source('focus', 'focus:' || v_focus.duration_minutes::text);
+    v_source_date := (v_focus.ended_at at time zone 'Asia/Bangkok')::date;
+    v_source_ledger_id := v_focus.wallet_ledger_id;
+  elsif p_reward_type = 'chore' then
+    select * into v_chore
+    from public.chore_completions
+    where id = v_source_id
+      and student_id = v_student_id
+    for update;
+    if not found then
+      raise exception 'REWARD_SOURCE_NOT_FOUND';
+    end if;
+    v_delta := public.reward_coins_for_source('chore', v_chore.quest_id);
+    v_source_date := v_chore.date;
+    v_source_ledger_id := v_chore.wallet_ledger_id;
+  else
+    select * into v_outdoor
+    from public.outdoor_completions
+    where id = v_source_id
+      and student_id = v_student_id
+    for update;
+    if not found then
+      raise exception 'REWARD_SOURCE_NOT_FOUND';
+    end if;
+    v_delta := public.reward_coins_for_source('outdoor', v_outdoor.quest_id);
+    v_source_date := v_outdoor.date;
+    v_source_ledger_id := v_outdoor.wallet_ledger_id;
+  end if;
+  if v_delta is null then
+    raise exception 'INVALID_REWARD_SOURCE';
+  end if;
+
   select * into v_existing from public.coin_ledger where request_id = p_request_id;
   if found then
     if v_existing.transaction_type <> v_transaction_type
       or v_existing.student_id <> v_student_id
       or v_existing.delta <> v_delta
-      or v_existing.source_id is distinct from p_source_id
-      or v_existing.source_date is distinct from p_source_date
+      or v_existing.source_id is distinct from v_source_id::text
+      or v_existing.source_date is distinct from v_source_date
       or v_existing.actor_user_id is not null then
       raise exception 'IDEMPOTENCY_CONFLICT';
     end if;
     return (v_existing.balance_after, v_existing.id, true);
   end if;
 
-  if exists (
-    select 1 from public.coin_ledger
-    where student_id = v_student_id
-      and transaction_type = v_transaction_type
-      and source_id = p_source_id
-      and source_date = p_source_date
-  ) then
+  if v_source_ledger_id is not null then
     raise exception 'REWARD_ALREADY_CLAIMED';
   end if;
 
@@ -359,11 +425,102 @@ begin
     balance_after, source_id, source_date, metadata
   ) values (
     p_request_id, v_student_id, v_transaction_type, v_delta, v_student.coins,
-    v_balance_after, p_source_id, p_source_date,
-    jsonb_build_object('reward_type', p_reward_type)
+    v_balance_after, v_source_id::text, v_source_date,
+    jsonb_build_object('reward_type', p_reward_type, 'source_id', v_source_id)
   ) returning id into v_ledger_id;
 
+  if p_reward_type = 'focus' then
+    update public.focus_sessions set wallet_ledger_id = v_ledger_id where id = v_source_id;
+  elsif p_reward_type = 'chore' then
+    update public.chore_completions set wallet_ledger_id = v_ledger_id where id = v_source_id;
+  else
+    update public.outdoor_completions set wallet_ledger_id = v_ledger_id where id = v_source_id;
+  end if;
+
   return (v_balance_after, v_ledger_id, false);
+end;
+$$;
+
+-- Replaces the prior device-restore implementation. Ledger and inventory use
+-- student_id foreign keys with delete cascades, so they must move before the
+-- replaced student row is deleted.
+create or replace function public.register_student(
+  p_student_id text,
+  p_device_id text
+)
+returns public.students
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_uid uuid := auth.uid();
+  v_row public.students;
+  v_existing public.students;
+  v_normalized text;
+  v_device text;
+begin
+  if v_uid is null then
+    raise exception 'NOT_AUTHENTICATED';
+  end if;
+
+  v_normalized := trim(p_student_id);
+  if v_normalized = '' then
+    raise exception 'INVALID_STUDENT_ID';
+  end if;
+  v_device := trim(p_device_id);
+  if v_device = '' then
+    raise exception 'INVALID_DEVICE_ID';
+  end if;
+
+  select * into v_existing
+  from public.students
+  where student_id = v_normalized
+    and device_id = v_device;
+
+  if found then
+    if v_existing.id = v_uid then
+      return v_existing;
+    end if;
+
+    update public.students
+    set
+      student_id = v_normalized || ':restore:' || v_existing.id::text,
+      device_id = v_device || ':restore:' || v_existing.id::text
+    where id = v_existing.id;
+
+    insert into public.students (id, student_id, device_id, coins, class_name, nickname)
+    values (
+      v_uid, v_normalized, v_device, v_existing.coins,
+      v_existing.class_name, v_existing.nickname
+    )
+    returning * into v_row;
+
+    update public.focus_sessions set student_id = v_uid where student_id = v_existing.id;
+    update public.daily_usage set student_id = v_uid where student_id = v_existing.id;
+    update public.chore_completions set student_id = v_uid where student_id = v_existing.id;
+    update public.outdoor_completions set student_id = v_uid where student_id = v_existing.id;
+    update public.coin_ledger set student_id = v_uid where student_id = v_existing.id;
+    update public.student_inventory set student_id = v_uid where student_id = v_existing.id;
+
+    delete from public.students where id = v_existing.id;
+    return v_row;
+  end if;
+
+  if exists (select 1 from public.students where student_id = v_normalized) then
+    raise exception 'STUDENT_ALREADY_REGISTERED';
+  end if;
+  if exists (select 1 from public.students where device_id = v_device) then
+    raise exception 'DEVICE_ALREADY_REGISTERED';
+  end if;
+  if exists (select 1 from public.students where id = v_uid) then
+    raise exception 'ALREADY_REGISTERED';
+  end if;
+
+  insert into public.students (id, student_id, device_id)
+  values (v_uid, v_normalized, v_device)
+  returning * into v_row;
+  return v_row;
 end;
 $$;
 
@@ -567,6 +724,18 @@ alter table public.coin_ledger enable row level security;
 alter table public.student_inventory enable row level security;
 alter table public.shop_catalog_versions enable row level security;
 alter table public.shop_catalog_items enable row level security;
+alter table public.outdoor_completions enable row level security;
+
+-- The previous broad update policy made coins writable by any owner or admin.
+-- PostgreSQL column grants keep the existing nickname/classroom flows while
+-- reserving coins for security-definer wallet RPCs.
+drop policy if exists students_update_own on public.students;
+create policy students_update_own on public.students
+  for update to authenticated
+  using (id = auth.uid() or public.is_admin())
+  with check (id = auth.uid() or public.is_admin());
+revoke update on table public.students from public, anon, authenticated;
+grant update (nickname, class_name) on table public.students to authenticated;
 
 create policy coin_ledger_select_own_or_admin on public.coin_ledger
   for select to authenticated
@@ -579,7 +748,8 @@ create policy student_inventory_select_own on public.student_inventory
 -- Clients only need their RLS-filtered read models; all writes are inside the
 -- security-definer RPCs above.
 revoke all on table public.coin_ledger, public.student_inventory,
-  public.shop_catalog_versions, public.shop_catalog_items from public, anon, authenticated;
+  public.shop_catalog_versions, public.shop_catalog_items, public.outdoor_completions
+  from public, anon, authenticated;
 grant select on table public.coin_ledger, public.student_inventory to authenticated;
 
 revoke all on function public.reward_coins_for_source(text, text) from public, anon, authenticated;

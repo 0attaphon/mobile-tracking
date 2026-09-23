@@ -1,6 +1,6 @@
 begin;
 
-select plan(22);
+select plan(30);
 
 select is(
   (select count(*)::integer from public.shop_catalog_items where version = 1),
@@ -14,11 +14,15 @@ insert into auth.users (
 ) values
   ('00000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', 'wallet-admin@example.test', 'not-used', now(), '{"provider":"email","providers":["email"]}'::jsonb, '{}'::jsonb),
   ('00000000-0000-0000-0000-000000000011', '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', 'wallet-student-one@example.test', 'not-used', now(), '{"provider":"email","providers":["email"]}'::jsonb, '{}'::jsonb),
-  ('00000000-0000-0000-0000-000000000012', '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', 'wallet-student-two@example.test', 'not-used', now(), '{"provider":"email","providers":["email"]}'::jsonb, '{}'::jsonb);
+  ('00000000-0000-0000-0000-000000000012', '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', 'wallet-student-two@example.test', 'not-used', now(), '{"provider":"email","providers":["email"]}'::jsonb, '{}'::jsonb),
+  ('00000000-0000-0000-0000-000000000013', '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', 'wallet-student-one-restored@example.test', 'not-used', now(), '{"provider":"email","providers":["email"]}'::jsonb, '{}'::jsonb);
 
 insert into public.students (id, student_id, device_id, coins) values
   ('00000000-0000-0000-0000-000000000011', 'STUDENT-ONE', 'wallet-device-one', 100),
   ('00000000-0000-0000-0000-000000000012', 'STUDENT-TWO', 'wallet-device-two', 25);
+
+insert into public.chore_completions (id, student_id, quest_id, date, coins_earned, completed_at) values
+  ('30000000-0000-0000-0000-000000000011', '00000000-0000-0000-0000-000000000011', 'chore_sweep', '2026-09-23', 0, '2026-09-23T12:00:00Z');
 
 -- An absent auth context and a non-admin user must not be able to deduct.
 select set_config('request.jwt.claim.sub', '', true);
@@ -82,6 +86,17 @@ select throws_ok(
 );
 
 select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-000000000011', true);
+set local role authenticated;
+select throws_ok(
+  $$update public.students set coins = 999 where id = '00000000-0000-0000-0000-000000000011'$$,
+  '42501', 'permission denied for table students',
+  'direct student coin updates are rejected'
+);
+select lives_ok(
+  $$update public.students set nickname = 'Wallet tester' where id = '00000000-0000-0000-0000-000000000011'$$,
+  'student nickname updates remain allowed'
+);
+reset role;
 select throws_ok(
   $$select * from public.purchase_shop_item('hat_tophat', 1, '20000000-0000-0000-0000-000000000001')$$,
   'P0001', 'INSUFFICIENT_COINS',
@@ -96,13 +111,23 @@ select throws_ok(
 );
 
 select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-000000000011', true);
-select results_eq(
-  $$select balance, replayed from public.claim_student_reward('30000000-0000-0000-0000-000000000001', 'chore', 'chore_sweep', '2026-09-23')$$,
-  $$values (85::integer, false)$$,
-  'server-owned chore reward credits once'
+select throws_ok(
+  $$select * from public.claim_student_reward('30000000-0000-0000-0000-000000000000', 'chore', '30000000-0000-0000-0000-000000000099', '1999-01-01')$$,
+  'P0001', 'REWARD_SOURCE_NOT_FOUND',
+  'forged reward source IDs are rejected'
 );
 select results_eq(
-  $$select balance, replayed from public.claim_student_reward('30000000-0000-0000-0000-000000000001', 'chore', 'chore_sweep', '2026-09-23')$$,
+  $$select balance, replayed from public.claim_student_reward('30000000-0000-0000-0000-000000000001', 'chore', '30000000-0000-0000-0000-000000000011', '1999-01-01')$$,
+  $$values (85::integer, false)$$,
+  'server-recorded chore reward credits once with its server date'
+);
+select is(
+  (select source_date from public.coin_ledger where request_id = '30000000-0000-0000-0000-000000000001'),
+  '2026-09-23'::date,
+  'reward claim derives the source date from the completed server row'
+);
+select results_eq(
+  $$select balance, replayed from public.claim_student_reward('30000000-0000-0000-0000-000000000001', 'chore', '30000000-0000-0000-0000-000000000011', '2030-01-01')$$,
   $$values (85::integer, true)$$,
   'reward replay returns its original result'
 );
@@ -118,6 +143,18 @@ select throws_ok(
   'P0001', 'UNKNOWN_ITEM',
   'legacy inventory import rejects unknown item IDs'
 );
+
+select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-000000000013', true);
+set local role authenticated;
+select results_eq(
+  $$select balance from public.register_student('STUDENT-ONE', 'wallet-device-one')$$,
+  $$values (85::integer)$$,
+  'reinstall restores the confirmed balance'
+);
+reset role;
+select is((select count(*)::integer from public.coin_ledger where student_id = '00000000-0000-0000-0000-000000000013'), 3, 'reinstall transfers ledger history to the new student ID');
+select is((select count(*)::integer from public.student_inventory where student_id = '00000000-0000-0000-0000-000000000013'), 1, 'reinstall transfers owned inventory to the new student ID');
+select is((select count(*)::integer from public.coin_ledger where student_id = '00000000-0000-0000-0000-000000000011'), 0, 'reinstall leaves no ledger history on the deleted student ID');
 
 select * from finish();
 rollback;
