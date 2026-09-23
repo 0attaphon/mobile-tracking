@@ -1,6 +1,6 @@
 begin;
 
-select plan(35);
+select plan(40);
 
 select is(
   (select count(*)::integer from public.shop_catalog_items where version = 1),
@@ -21,8 +21,10 @@ insert into public.students (id, student_id, device_id, coins) values
   ('00000000-0000-0000-0000-000000000011', 'STUDENT-ONE', 'wallet-device-one', 100),
   ('00000000-0000-0000-0000-000000000012', 'STUDENT-TWO', 'wallet-device-two', 25);
 
-insert into public.chore_completions (id, student_id, quest_id, date, coins_earned, completed_at) values
-  ('30000000-0000-0000-0000-000000000011', '00000000-0000-0000-0000-000000000011', 'chore_sweep', '2026-09-23', 0, '2026-09-23T12:00:00Z');
+create temporary table wallet_test_challenges (
+  name text primary key,
+  nonce uuid not null
+);
 
 -- An absent auth context and a non-admin user must not be able to deduct.
 select set_config('request.jwt.claim.sub', '', true);
@@ -121,39 +123,70 @@ select throws_ok(
   'P0001', 'REWARD_SOURCE_NOT_FOUND',
   'forged reward source IDs are rejected'
 );
+select throws_ok(
+  $$select * from public.record_outdoor_completion('50000000-0000-0000-0000-000000000000', '40000000-0000-0000-0000-000000000010')$$,
+  'P0001', 'CHALLENGE_NOT_FOUND',
+  'an unknown challenge nonce cannot mint coins'
+);
+insert into wallet_test_challenges (name, nonce)
+select 'chore', nonce from public.issue_reward_challenge('chore', 'chore_sweep');
+select throws_ok(
+  $$select * from public.issue_reward_challenge('outdoor', 'outdoor_walk')$$,
+  'P0001', 'CHALLENGE_ACTIVE',
+  'only one active reward challenge is allowed'
+);
 select results_eq(
-  $$select balance, replayed from public.claim_student_reward('30000000-0000-0000-0000-000000000001', 'chore', '30000000-0000-0000-0000-000000000011', '1999-01-01')$$,
+  $$select balance, replayed from public.record_chore_completion('30000000-0000-0000-0000-000000000001', (select nonce from wallet_test_challenges where name = 'chore'))$$,
   $$values (85::integer, false)$$,
-  'server-recorded chore reward credits once with its server date'
+  'issued chore challenge records and credits once with its server date'
 );
 select is(
   (select source_date from public.coin_ledger where request_id = '30000000-0000-0000-0000-000000000001'),
-  '2026-09-23'::date,
+  (now() at time zone 'Asia/Bangkok')::date,
   'reward claim derives the source date from the completed server row'
 );
 select results_eq(
-  $$select balance, replayed from public.claim_student_reward('30000000-0000-0000-0000-000000000001', 'chore', '30000000-0000-0000-0000-000000000011', '2030-01-01')$$,
+  $$select balance, replayed from public.record_chore_completion('30000000-0000-0000-0000-000000000001', (select nonce from wallet_test_challenges where name = 'chore'))$$,
   $$values (85::integer, true)$$,
   'reward replay returns its original result'
 );
 select is((select count(*)::integer from public.coin_ledger where request_id = '30000000-0000-0000-0000-000000000001'), 1, 'reward replay writes one ledger row');
 
 select throws_ok(
-  $$select * from public.record_outdoor_completion('50000000-0000-0000-0000-000000000001', '40000000-0000-0000-0000-000000000011', 'outdoor-not-real')$$,
+  $$select * from public.issue_reward_challenge('outdoor', 'outdoor-not-real')$$,
   'P0001', 'INVALID_REWARD_SOURCE',
   'invalid outdoor quest IDs cannot mint coins'
 );
+insert into wallet_test_challenges (name, nonce)
+select 'outdoor-one', nonce from public.issue_reward_challenge('outdoor', 'outdoor_walk');
 select results_eq(
-  $$select balance, replayed from public.record_outdoor_completion('50000000-0000-0000-0000-000000000002', '40000000-0000-0000-0000-000000000012', 'outdoor_walk')$$,
+  $$select balance, replayed from public.record_outdoor_completion('50000000-0000-0000-0000-000000000002', (select nonce from wallet_test_challenges where name = 'outdoor-one'))$$,
   $$values (110::integer, false)$$,
   'recorded outdoor completion creates and consumes one server source'
 );
 select results_eq(
-  $$select balance, replayed from public.record_outdoor_completion('50000000-0000-0000-0000-000000000002', '40000000-0000-0000-0000-000000000012', 'outdoor_walk')$$,
+  $$select balance, replayed from public.record_outdoor_completion('50000000-0000-0000-0000-000000000002', (select nonce from wallet_test_challenges where name = 'outdoor-one'))$$,
   $$values (110::integer, true)$$,
   'outdoor completion retry is idempotent'
 );
 select is((select count(*)::integer from public.coin_ledger where request_id = '50000000-0000-0000-0000-000000000002'), 1, 'outdoor retry writes one ledger row');
+insert into wallet_test_challenges (name, nonce)
+select 'outdoor-two', nonce from public.issue_reward_challenge('outdoor', 'outdoor_water_plants');
+select lives_ok(
+  $$select * from public.record_outdoor_completion('50000000-0000-0000-0000-000000000003', (select nonce from wallet_test_challenges where name = 'outdoor-two'))$$,
+  'second outdoor reward consumes an issued challenge'
+);
+insert into wallet_test_challenges (name, nonce)
+select 'outdoor-three', nonce from public.issue_reward_challenge('outdoor', 'outdoor_sweep');
+select lives_ok(
+  $$select * from public.record_outdoor_completion('50000000-0000-0000-0000-000000000004', (select nonce from wallet_test_challenges where name = 'outdoor-three'))$$,
+  'third outdoor reward consumes an issued challenge'
+);
+select throws_ok(
+  $$select * from public.issue_reward_challenge('outdoor', 'outdoor_collect_leaves')$$,
+  'P0001', 'OUTDOOR_DAILY_QUOTA_REACHED',
+  'outdoor daily reward quota is enforced'
+);
 
 select lives_ok(
   $$select * from public.import_legacy_inventory(array['hat_school', 'hat_school'], '40000000-0000-0000-0000-000000000001')$$,
@@ -170,11 +203,11 @@ select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-000000000013
 set local role authenticated;
 select results_eq(
   $$select balance from public.register_student('STUDENT-ONE', 'wallet-device-one')$$,
-  $$values (85::integer)$$,
+  $$values (160::integer)$$,
   'reinstall restores the confirmed balance'
 );
 reset role;
-select is((select count(*)::integer from public.coin_ledger where student_id = '00000000-0000-0000-0000-000000000013'), 4, 'reinstall transfers ledger history to the new student ID');
+select is((select count(*)::integer from public.coin_ledger where student_id = '00000000-0000-0000-0000-000000000013'), 6, 'reinstall transfers ledger history to the new student ID');
 select is((select count(*)::integer from public.student_inventory where student_id = '00000000-0000-0000-0000-000000000013'), 1, 'reinstall transfers owned inventory to the new student ID');
 select is((select count(*)::integer from public.coin_ledger where student_id = '00000000-0000-0000-0000-000000000011'), 0, 'reinstall leaves no ledger history on the deleted student ID');
 

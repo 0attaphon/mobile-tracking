@@ -72,6 +72,35 @@ create table public.outdoor_completions (
 create index outdoor_completions_student_date_idx
   on public.outdoor_completions (student_id, date);
 
+create type public.reward_challenge_result as (
+  nonce uuid,
+  expires_at timestamptz,
+  replayed boolean
+);
+
+-- A challenge is issued immediately before a locally verified activity is
+-- recorded. Its nonce is opaque to source-writing RPCs and expires quickly.
+create table public.reward_challenges (
+  nonce uuid primary key default gen_random_uuid(),
+  student_id uuid not null references public.students (id) on delete cascade,
+  reward_type text not null check (reward_type in ('focus', 'chore', 'outdoor')),
+  source_id text not null,
+  source_date date not null,
+  expected_duration integer,
+  issued_at timestamptz not null default now(),
+  expires_at timestamptz not null,
+  consumed_at timestamptz,
+  ledger_id uuid unique references public.coin_ledger (id) on delete restrict,
+  constraint reward_challenges_focus_duration check (
+    (reward_type = 'focus' and expected_duration is not null)
+    or (reward_type <> 'focus' and expected_duration is null)
+  )
+);
+
+create index reward_challenges_student_active_idx
+  on public.reward_challenges (student_id, expires_at)
+  where consumed_at is null;
+
 create table public.shop_catalog_versions (
   version integer primary key,
   active boolean not null default false,
@@ -324,6 +353,7 @@ declare
   v_source_id uuid;
   v_source_date date;
   v_source_ledger_id uuid;
+  v_ledger_source_id text;
   v_delta integer;
   v_balance_after integer;
   v_ledger_id uuid;
@@ -372,6 +402,7 @@ begin
     v_delta := public.reward_coins_for_source('focus', 'focus:' || v_focus.duration_minutes::text);
     v_source_date := (v_focus.ended_at at time zone 'Asia/Bangkok')::date;
     v_source_ledger_id := v_focus.wallet_ledger_id;
+    v_ledger_source_id := v_source_id::text;
   elsif p_reward_type = 'chore' then
     select * into v_chore
     from public.chore_completions
@@ -384,6 +415,7 @@ begin
     v_delta := public.reward_coins_for_source('chore', v_chore.quest_id);
     v_source_date := v_chore.date;
     v_source_ledger_id := v_chore.wallet_ledger_id;
+    v_ledger_source_id := v_chore.quest_id;
   else
     select * into v_outdoor
     from public.outdoor_completions
@@ -396,6 +428,7 @@ begin
     v_delta := public.reward_coins_for_source('outdoor', v_outdoor.quest_id);
     v_source_date := v_outdoor.date;
     v_source_ledger_id := v_outdoor.wallet_ledger_id;
+    v_ledger_source_id := v_outdoor.quest_id;
   end if;
   if v_delta is null then
     raise exception 'INVALID_REWARD_SOURCE';
@@ -406,7 +439,7 @@ begin
     if v_existing.transaction_type <> v_transaction_type
       or v_existing.student_id <> v_student_id
       or v_existing.delta <> v_delta
-      or v_existing.source_id is distinct from v_source_id::text
+      or v_existing.source_id is distinct from v_ledger_source_id
       or v_existing.source_date is distinct from v_source_date
       or v_existing.actor_user_id is not null then
       raise exception 'IDEMPOTENCY_CONFLICT';
@@ -425,8 +458,12 @@ begin
     balance_after, source_id, source_date, metadata
   ) values (
     p_request_id, v_student_id, v_transaction_type, v_delta, v_student.coins,
-    v_balance_after, v_source_id::text, v_source_date,
-    jsonb_build_object('reward_type', p_reward_type, 'source_id', v_source_id)
+    v_balance_after, v_ledger_source_id, v_source_date,
+    jsonb_build_object(
+      'reward_type', p_reward_type,
+      'source_id', v_ledger_source_id,
+      'source_record_id', v_source_id
+    )
   ) returning id into v_ledger_id;
 
   if p_reward_type = 'focus' then
@@ -441,14 +478,152 @@ begin
 end;
 $$;
 
--- Source-recording RPCs are the only authenticated path into reward sources.
--- They accept stable client UUIDs for retry, derive dates and coin values on
--- the server, then consume the source through claim_student_reward in the
--- same transaction.
-create or replace function public.record_focus_completion(
-  p_request_id uuid,
+-- Focus time starts on the server. A later challenge is not available until
+-- the recorded duration has actually elapsed.
+create or replace function public.start_focus_reward_session(
   p_source_id uuid,
   p_duration_minutes integer
+)
+returns uuid
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_student_id uuid := auth.uid();
+  v_existing public.focus_sessions%rowtype;
+begin
+  if v_student_id is null then
+    raise exception 'NOT_AUTHENTICATED';
+  end if;
+  if p_source_id is null or public.reward_coins_for_source('focus', 'focus:' || p_duration_minutes::text) is null then
+    raise exception 'INVALID_REWARD_SOURCE';
+  end if;
+
+  select * into v_existing from public.focus_sessions where id = p_source_id for update;
+  if found then
+    if v_existing.student_id <> v_student_id or v_existing.duration_minutes <> p_duration_minutes then
+      raise exception 'IDEMPOTENCY_CONFLICT';
+    end if;
+    return p_source_id;
+  end if;
+
+  insert into public.focus_sessions (id, student_id, duration_minutes, status, coins_earned, started_at)
+  values (p_source_id, v_student_id, p_duration_minutes, 'in_progress', 0, now());
+  return p_source_id;
+end;
+$$;
+
+create or replace function public.issue_reward_challenge(
+  p_reward_type text,
+  p_source_id text
+)
+returns public.reward_challenge_result
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_student_id uuid := auth.uid();
+  v_student public.students%rowtype;
+  v_active public.reward_challenges%rowtype;
+  v_challenge public.reward_challenges%rowtype;
+  v_focus public.focus_sessions%rowtype;
+  v_transaction_type text;
+  v_source_id text := trim(coalesce(p_source_id, ''));
+  v_source_uuid uuid;
+  v_source_date date;
+  v_expected_duration integer;
+begin
+  if v_student_id is null then
+    raise exception 'NOT_AUTHENTICATED';
+  end if;
+  if p_reward_type not in ('focus', 'chore', 'outdoor') or v_source_id = '' then
+    raise exception 'INVALID_REWARD_SOURCE';
+  end if;
+
+  select * into v_student from public.students where id = v_student_id for update;
+  if not found then
+    raise exception 'STUDENT_NOT_FOUND';
+  end if;
+  update public.reward_challenges
+  set expires_at = now()
+  where student_id = v_student_id and consumed_at is null and expires_at < now();
+  select * into v_active
+  from public.reward_challenges
+  where student_id = v_student_id and consumed_at is null and expires_at >= now()
+  order by issued_at desc
+  limit 1
+  for update;
+  if found then
+    if v_active.reward_type = p_reward_type and v_active.source_id = v_source_id then
+      return (v_active.nonce, v_active.expires_at, true);
+    end if;
+    raise exception 'CHALLENGE_ACTIVE';
+  end if;
+
+  v_transaction_type := p_reward_type || '_reward';
+  if p_reward_type = 'focus' then
+    if v_source_id !~* '^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$' then
+      raise exception 'INVALID_REWARD_SOURCE';
+    end if;
+    v_source_uuid := v_source_id::uuid;
+    select * into v_focus
+    from public.focus_sessions
+    where id = v_source_uuid and student_id = v_student_id
+    for update;
+    if not found or v_focus.started_at is null
+      or now() < v_focus.started_at + make_interval(mins => v_focus.duration_minutes) then
+      raise exception 'FOCUS_NOT_COMPLETE';
+    end if;
+    if v_focus.status = 'in_progress' then
+      update public.focus_sessions
+      set status = 'completed', ended_at = now()
+      where id = v_source_uuid;
+      v_focus.ended_at := now();
+    elsif v_focus.status <> 'completed' then
+      raise exception 'FOCUS_NOT_COMPLETE';
+    end if;
+    v_source_date := (coalesce(v_focus.ended_at, now()) at time zone 'Asia/Bangkok')::date;
+    v_expected_duration := v_focus.duration_minutes;
+  else
+    if public.reward_coins_for_source(p_reward_type, v_source_id) is null then
+      raise exception 'INVALID_REWARD_SOURCE';
+    end if;
+    v_source_date := (now() at time zone 'Asia/Bangkok')::date;
+    if p_reward_type = 'outdoor' and (
+      select count(*) from public.coin_ledger
+      where student_id = v_student_id
+        and transaction_type = 'outdoor_reward'
+        and source_date = v_source_date
+    ) >= 3 then
+      raise exception 'OUTDOOR_DAILY_QUOTA_REACHED';
+    end if;
+  end if;
+
+  if exists (
+    select 1 from public.coin_ledger
+    where student_id = v_student_id
+      and transaction_type = v_transaction_type
+      and source_id = v_source_id
+      and source_date = v_source_date
+  ) then
+    raise exception 'REWARD_ALREADY_CLAIMED';
+  end if;
+
+  insert into public.reward_challenges (
+    student_id, reward_type, source_id, source_date, expected_duration, expires_at
+  ) values (
+    v_student_id, p_reward_type, v_source_id, v_source_date, v_expected_duration,
+    now() + interval '10 minutes'
+  ) returning * into v_challenge;
+  return (v_challenge.nonce, v_challenge.expires_at, false);
+end;
+$$;
+
+create or replace function public.record_focus_completion(
+  p_request_id uuid,
+  p_challenge_nonce uuid
 )
 returns public.wallet_transaction_result
 language plpgsql
@@ -457,43 +632,31 @@ set search_path = public
 as $$
 declare
   v_student_id uuid := auth.uid();
-  v_source public.focus_sessions%rowtype;
+  v_challenge public.reward_challenges%rowtype;
+  v_ledger public.coin_ledger%rowtype;
+  v_result public.wallet_transaction_result;
 begin
-  if v_student_id is null then
-    raise exception 'NOT_AUTHENTICATED';
-  end if;
-  if p_request_id is null or p_source_id is null then
-    raise exception 'INVALID_REQUEST_ID';
-  end if;
-  if public.reward_coins_for_source('focus', 'focus:' || p_duration_minutes::text) is null then
-    raise exception 'INVALID_REWARD_SOURCE';
-  end if;
-
-  insert into public.focus_sessions (
-    id, student_id, duration_minutes, status, coins_earned, ended_at
-  ) values (
-    p_source_id, v_student_id, p_duration_minutes, 'completed', 0, now()
-  ) on conflict (id) do nothing;
-
-  select * into v_source
-  from public.focus_sessions
-  where id = p_source_id and student_id = v_student_id
-  for update;
-  if not found then
-    raise exception 'REWARD_SOURCE_NOT_FOUND';
-  end if;
-  if v_source.status <> 'completed' or v_source.duration_minutes <> p_duration_minutes then
+  if v_student_id is null then raise exception 'NOT_AUTHENTICATED'; end if;
+  if p_request_id is null or p_challenge_nonce is null then raise exception 'INVALID_REQUEST_ID'; end if;
+  select * into v_challenge from public.reward_challenges
+  where nonce = p_challenge_nonce and student_id = v_student_id for update;
+  if not found then raise exception 'CHALLENGE_NOT_FOUND'; end if;
+  if v_challenge.reward_type <> 'focus' then raise exception 'CHALLENGE_TYPE_MISMATCH'; end if;
+  if v_challenge.consumed_at is not null then
+    select * into v_ledger from public.coin_ledger where id = v_challenge.ledger_id;
+    if v_ledger.request_id = p_request_id then return (v_ledger.balance_after, v_ledger.id, true); end if;
     raise exception 'IDEMPOTENCY_CONFLICT';
   end if;
-
-  return public.claim_student_reward(p_request_id, 'focus', p_source_id::text, null);
+  if v_challenge.expires_at < now() then raise exception 'CHALLENGE_EXPIRED'; end if;
+  v_result := public.claim_student_reward(p_request_id, 'focus', v_challenge.source_id, null);
+  update public.reward_challenges set consumed_at = now(), ledger_id = v_result.ledger_id where nonce = p_challenge_nonce;
+  return v_result;
 end;
 $$;
 
 create or replace function public.record_chore_completion(
   p_request_id uuid,
-  p_source_id uuid,
-  p_quest_id text
+  p_challenge_nonce uuid
 )
 returns public.wallet_transaction_result
 language plpgsql
@@ -502,45 +665,33 @@ set search_path = public
 as $$
 declare
   v_student_id uuid := auth.uid();
-  v_source public.chore_completions%rowtype;
-  v_quest_id text := trim(coalesce(p_quest_id, ''));
-  v_date date := (now() at time zone 'Asia/Bangkok')::date;
+  v_challenge public.reward_challenges%rowtype;
+  v_ledger public.coin_ledger%rowtype;
+  v_result public.wallet_transaction_result;
 begin
-  if v_student_id is null then
-    raise exception 'NOT_AUTHENTICATED';
-  end if;
-  if p_request_id is null or p_source_id is null then
-    raise exception 'INVALID_REQUEST_ID';
-  end if;
-  if public.reward_coins_for_source('chore', v_quest_id) is null then
-    raise exception 'INVALID_REWARD_SOURCE';
-  end if;
-
-  insert into public.chore_completions (
-    id, student_id, quest_id, date, coins_earned, completed_at
-  ) values (
-    p_source_id, v_student_id, v_quest_id, v_date, 0, now()
-  ) on conflict (id) do nothing;
-
-  select * into v_source
-  from public.chore_completions
-  where id = p_source_id and student_id = v_student_id
-  for update;
-  if not found then
-    raise exception 'REWARD_SOURCE_NOT_FOUND';
-  end if;
-  if v_source.quest_id <> v_quest_id then
+  if v_student_id is null then raise exception 'NOT_AUTHENTICATED'; end if;
+  if p_request_id is null or p_challenge_nonce is null then raise exception 'INVALID_REQUEST_ID'; end if;
+  select * into v_challenge from public.reward_challenges
+  where nonce = p_challenge_nonce and student_id = v_student_id for update;
+  if not found then raise exception 'CHALLENGE_NOT_FOUND'; end if;
+  if v_challenge.reward_type <> 'chore' then raise exception 'CHALLENGE_TYPE_MISMATCH'; end if;
+  if v_challenge.consumed_at is not null then
+    select * into v_ledger from public.coin_ledger where id = v_challenge.ledger_id;
+    if v_ledger.request_id = p_request_id then return (v_ledger.balance_after, v_ledger.id, true); end if;
     raise exception 'IDEMPOTENCY_CONFLICT';
   end if;
-
-  return public.claim_student_reward(p_request_id, 'chore', p_source_id::text, null);
+  if v_challenge.expires_at < now() then raise exception 'CHALLENGE_EXPIRED'; end if;
+  insert into public.chore_completions (id, student_id, quest_id, date, coins_earned, completed_at)
+  values (v_challenge.nonce, v_student_id, v_challenge.source_id, v_challenge.source_date, 0, now());
+  v_result := public.claim_student_reward(p_request_id, 'chore', v_challenge.nonce::text, null);
+  update public.reward_challenges set consumed_at = now(), ledger_id = v_result.ledger_id where nonce = p_challenge_nonce;
+  return v_result;
 end;
 $$;
 
 create or replace function public.record_outdoor_completion(
   p_request_id uuid,
-  p_source_id uuid,
-  p_quest_id text
+  p_challenge_nonce uuid
 )
 returns public.wallet_transaction_result
 language plpgsql
@@ -549,36 +700,27 @@ set search_path = public
 as $$
 declare
   v_student_id uuid := auth.uid();
-  v_source public.outdoor_completions%rowtype;
-  v_quest_id text := trim(coalesce(p_quest_id, ''));
-  v_date date := (now() at time zone 'Asia/Bangkok')::date;
+  v_challenge public.reward_challenges%rowtype;
+  v_ledger public.coin_ledger%rowtype;
+  v_result public.wallet_transaction_result;
 begin
-  if v_student_id is null then
-    raise exception 'NOT_AUTHENTICATED';
-  end if;
-  if p_request_id is null or p_source_id is null then
-    raise exception 'INVALID_REQUEST_ID';
-  end if;
-  if public.reward_coins_for_source('outdoor', v_quest_id) is null then
-    raise exception 'INVALID_REWARD_SOURCE';
-  end if;
-
-  insert into public.outdoor_completions (id, student_id, quest_id, date)
-  values (p_source_id, v_student_id, v_quest_id, v_date)
-  on conflict (id) do nothing;
-
-  select * into v_source
-  from public.outdoor_completions
-  where id = p_source_id and student_id = v_student_id
-  for update;
-  if not found then
-    raise exception 'REWARD_SOURCE_NOT_FOUND';
-  end if;
-  if v_source.quest_id <> v_quest_id then
+  if v_student_id is null then raise exception 'NOT_AUTHENTICATED'; end if;
+  if p_request_id is null or p_challenge_nonce is null then raise exception 'INVALID_REQUEST_ID'; end if;
+  select * into v_challenge from public.reward_challenges
+  where nonce = p_challenge_nonce and student_id = v_student_id for update;
+  if not found then raise exception 'CHALLENGE_NOT_FOUND'; end if;
+  if v_challenge.reward_type <> 'outdoor' then raise exception 'CHALLENGE_TYPE_MISMATCH'; end if;
+  if v_challenge.consumed_at is not null then
+    select * into v_ledger from public.coin_ledger where id = v_challenge.ledger_id;
+    if v_ledger.request_id = p_request_id then return (v_ledger.balance_after, v_ledger.id, true); end if;
     raise exception 'IDEMPOTENCY_CONFLICT';
   end if;
-
-  return public.claim_student_reward(p_request_id, 'outdoor', p_source_id::text, null);
+  if v_challenge.expires_at < now() then raise exception 'CHALLENGE_EXPIRED'; end if;
+  insert into public.outdoor_completions (id, student_id, quest_id, date)
+  values (v_challenge.nonce, v_student_id, v_challenge.source_id, v_challenge.source_date);
+  v_result := public.claim_student_reward(p_request_id, 'outdoor', v_challenge.nonce::text, null);
+  update public.reward_challenges set consumed_at = now(), ledger_id = v_result.ledger_id where nonce = p_challenge_nonce;
+  return v_result;
 end;
 $$;
 
@@ -641,6 +783,7 @@ begin
     update public.daily_usage set student_id = v_uid where student_id = v_existing.id;
     update public.chore_completions set student_id = v_uid where student_id = v_existing.id;
     update public.outdoor_completions set student_id = v_uid where student_id = v_existing.id;
+    update public.reward_challenges set student_id = v_uid where student_id = v_existing.id;
     update public.coin_ledger set student_id = v_uid where student_id = v_existing.id;
     update public.student_inventory set student_id = v_uid where student_id = v_existing.id;
 
@@ -866,6 +1009,7 @@ alter table public.student_inventory enable row level security;
 alter table public.shop_catalog_versions enable row level security;
 alter table public.shop_catalog_items enable row level security;
 alter table public.outdoor_completions enable row level security;
+alter table public.reward_challenges enable row level security;
 
 -- The previous broad update policy made coins writable by any owner or admin.
 -- PostgreSQL column grants keep the existing nickname/classroom flows while
@@ -889,7 +1033,8 @@ create policy student_inventory_select_own on public.student_inventory
 -- Clients only need their RLS-filtered read models; all writes are inside the
 -- security-definer RPCs above.
 revoke all on table public.coin_ledger, public.student_inventory,
-  public.shop_catalog_versions, public.shop_catalog_items, public.outdoor_completions
+  public.shop_catalog_versions, public.shop_catalog_items, public.outdoor_completions,
+  public.reward_challenges
   from public, anon, authenticated;
 grant select on table public.coin_ledger, public.student_inventory to authenticated;
 
@@ -901,18 +1046,21 @@ revoke insert on table public.focus_sessions, public.chore_completions
 revoke all on function public.reward_coins_for_source(text, text) from public, anon, authenticated;
 revoke all on function public.admin_deduct_student_coins(text, integer, uuid, integer) from public, anon, authenticated;
 revoke all on function public.claim_student_reward(uuid, text, text, date) from public, anon, authenticated;
-revoke all on function public.record_focus_completion(uuid, uuid, integer) from public, anon, authenticated;
-revoke all on function public.record_chore_completion(uuid, uuid, text) from public, anon, authenticated;
-revoke all on function public.record_outdoor_completion(uuid, uuid, text) from public, anon, authenticated;
+revoke all on function public.start_focus_reward_session(uuid, integer) from public, anon, authenticated;
+revoke all on function public.issue_reward_challenge(text, text) from public, anon, authenticated;
+revoke all on function public.record_focus_completion(uuid, uuid) from public, anon, authenticated;
+revoke all on function public.record_chore_completion(uuid, uuid) from public, anon, authenticated;
+revoke all on function public.record_outdoor_completion(uuid, uuid) from public, anon, authenticated;
 revoke all on function public.purchase_shop_item(text, integer, uuid) from public, anon, authenticated;
 revoke all on function public.import_legacy_inventory(text[], uuid) from public, anon, authenticated;
 revoke all on function public.get_my_wallet() from public, anon, authenticated;
 revoke all on function public.get_my_coin_history(integer) from public, anon, authenticated;
 grant execute on function public.admin_deduct_student_coins(text, integer, uuid, integer) to authenticated;
-grant execute on function public.claim_student_reward(uuid, text, text, date) to authenticated;
-grant execute on function public.record_focus_completion(uuid, uuid, integer) to authenticated;
-grant execute on function public.record_chore_completion(uuid, uuid, text) to authenticated;
-grant execute on function public.record_outdoor_completion(uuid, uuid, text) to authenticated;
+grant execute on function public.start_focus_reward_session(uuid, integer) to authenticated;
+grant execute on function public.issue_reward_challenge(text, text) to authenticated;
+grant execute on function public.record_focus_completion(uuid, uuid) to authenticated;
+grant execute on function public.record_chore_completion(uuid, uuid) to authenticated;
+grant execute on function public.record_outdoor_completion(uuid, uuid) to authenticated;
 grant execute on function public.purchase_shop_item(text, integer, uuid) to authenticated;
 grant execute on function public.import_legacy_inventory(text[], uuid) to authenticated;
 grant execute on function public.get_my_wallet() to authenticated;
