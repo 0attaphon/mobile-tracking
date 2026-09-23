@@ -1,6 +1,6 @@
 begin;
 
-select plan(62);
+select plan(68);
 
 select is(
   (select count(*)::integer from public.shop_catalog_items where version = 1),
@@ -149,6 +149,12 @@ select throws_ok(
 select lives_ok(
   $$update public.students set nickname = 'Wallet tester' where id = '00000000-0000-0000-0000-000000000011'$$,
   'student nickname updates remain allowed'
+);
+select throws_ok(
+  $$insert into public.students (id, student_id, device_id, coins)
+    values ('00000000-0000-0000-0000-000000000013', 'FORGED-WALLET-STUDENT', 'forged-wallet-device', 999999)$$,
+  '42501', 'permission denied for table students',
+  'clients cannot create a student with a forged coin balance'
 );
 select throws_ok(
   $$insert into public.chore_completions (id, student_id, quest_id, date) values ('30000000-0000-0000-0000-000000000012', '00000000-0000-0000-0000-000000000011', 'chore_sweep', '2026-09-23')$$,
@@ -308,6 +314,11 @@ select results_eq(
   $$values ('70000000-0000-0000-0000-000000000001'::uuid)$$,
   'server starts an in-progress focus reward session'
 );
+select throws_ok(
+  $$select public.start_focus_reward_session('70000000-0000-0000-0000-000000000003', 30)$$,
+  'P0001', 'FOCUS_SESSION_ACTIVE',
+  'a second in-progress focus reward session is rejected'
+);
 reset role;
 select ok(
   (select ended_at is null from public.focus_sessions where id = '70000000-0000-0000-0000-000000000001'),
@@ -360,6 +371,31 @@ select is(
   (select ended_at from wallet_test_focus_end),
   'focus replay preserves the original completion timestamp'
 );
+
+set local role authenticated;
+select results_eq(
+  $$select public.start_focus_reward_session('70000000-0000-0000-0000-000000000003', 30)$$,
+  $$values ('70000000-0000-0000-0000-000000000003'::uuid)$$,
+  'completed focus releases the student to start another reward session'
+);
+select results_eq(
+  $$select public.cancel_focus_reward_session('70000000-0000-0000-0000-000000000003')$$,
+  $$values ('70000000-0000-0000-0000-000000000003'::uuid)$$,
+  'active focus reward session can be cancelled'
+);
+reset role;
+select is(
+  (select status from public.focus_sessions where id = '70000000-0000-0000-0000-000000000003'),
+  'cancelled',
+  'cancellation marks the active focus source cancelled'
+);
+set local role authenticated;
+select results_eq(
+  $$select public.start_focus_reward_session('70000000-0000-0000-0000-000000000004', 30)$$,
+  $$values ('70000000-0000-0000-0000-000000000004'::uuid)$$,
+  'cancelled focus releases the student to start another reward session'
+);
+reset role;
 
 select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-000000000011', true);
 select lives_ok(

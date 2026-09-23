@@ -67,6 +67,13 @@ alter table public.focus_sessions
   add constraint focus_sessions_status_check
     check (status in ('in_progress', 'completed', 'failed', 'cancelled'));
 
+-- Only one server-started focus reward session may run for a student. The
+-- index is the final concurrency guard; the RPC also takes the student row
+-- lock so a normal overlapping request returns a stable application error.
+create unique index focus_sessions_one_in_progress_per_student_idx
+  on public.focus_sessions (student_id)
+  where status = 'in_progress';
+
 alter table public.chore_completions
   add column wallet_ledger_id uuid references public.coin_ledger (id) on delete restrict;
 
@@ -543,6 +550,11 @@ begin
     raise exception 'INVALID_REWARD_SOURCE';
   end if;
 
+  perform 1 from public.students where id = v_student_id for update;
+  if not found then
+    raise exception 'STUDENT_NOT_FOUND';
+  end if;
+
   select * into v_existing from public.focus_sessions where id = p_source_id for update;
   if found then
     if v_existing.student_id <> v_student_id or v_existing.duration_minutes <> p_duration_minutes then
@@ -551,8 +563,71 @@ begin
     return p_source_id;
   end if;
 
-  insert into public.focus_sessions (id, student_id, duration_minutes, status, coins_earned, started_at)
-  values (p_source_id, v_student_id, p_duration_minutes, 'in_progress', 0, clock_timestamp());
+  perform 1 from public.focus_sessions
+  where student_id = v_student_id and status = 'in_progress'
+  for update;
+  if found then
+    raise exception 'FOCUS_SESSION_ACTIVE';
+  end if;
+
+  begin
+    insert into public.focus_sessions (id, student_id, duration_minutes, status, coins_earned, started_at)
+    values (p_source_id, v_student_id, p_duration_minutes, 'in_progress', 0, clock_timestamp());
+  exception when unique_violation then
+    raise exception 'FOCUS_SESSION_ACTIVE';
+  end;
+  return p_source_id;
+end;
+$$;
+
+-- A cancelled focus source cannot later consume a reward challenge. Expiring
+-- its unconsumed challenge also lets the student begin and challenge a new
+-- focus session immediately.
+create or replace function public.cancel_focus_reward_session(
+  p_source_id uuid
+)
+returns uuid
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_student_id uuid := auth.uid();
+  v_focus public.focus_sessions%rowtype;
+begin
+  if v_student_id is null then
+    raise exception 'NOT_AUTHENTICATED';
+  end if;
+  if p_source_id is null then
+    raise exception 'INVALID_REWARD_SOURCE';
+  end if;
+
+  select * into v_focus
+  from public.focus_sessions
+  where id = p_source_id and student_id = v_student_id
+  for update;
+  if not found then
+    raise exception 'FOCUS_SESSION_NOT_FOUND';
+  end if;
+  if v_focus.status = 'cancelled' then
+    return p_source_id;
+  end if;
+  if v_focus.status <> 'in_progress' then
+    raise exception 'FOCUS_SESSION_NOT_ACTIVE';
+  end if;
+
+  update public.focus_sessions
+  set status = 'cancelled', ended_at = clock_timestamp()
+  where id = p_source_id;
+
+  update public.reward_challenges
+  set expires_at = clock_timestamp()
+  where student_id = v_student_id
+    and reward_type = 'focus'
+    and source_id = p_source_id::text
+    and consumed_at is null
+    and expires_at > clock_timestamp();
+
   return p_source_id;
 end;
 $$;
@@ -814,11 +889,20 @@ as $$
 declare
   v_student_id uuid := auth.uid();
   v_challenge public.reward_challenges%rowtype;
+  v_focus public.focus_sessions%rowtype;
   v_ledger public.coin_ledger%rowtype;
   v_result public.wallet_transaction_result;
 begin
   if v_student_id is null then raise exception 'NOT_AUTHENTICATED'; end if;
   if p_request_id is null or p_challenge_nonce is null then raise exception 'INVALID_REQUEST_ID'; end if;
+  select * into v_challenge from public.reward_challenges
+  where nonce = p_challenge_nonce and student_id = v_student_id;
+  if not found then raise exception 'CHALLENGE_NOT_FOUND'; end if;
+  if v_challenge.reward_type <> 'focus' then raise exception 'CHALLENGE_TYPE_MISMATCH'; end if;
+  select * into v_focus from public.focus_sessions
+  where id = v_challenge.source_id::uuid and student_id = v_student_id
+  for update;
+  if not found then raise exception 'FOCUS_NOT_COMPLETE'; end if;
   select * into v_challenge from public.reward_challenges
   where nonce = p_challenge_nonce and student_id = v_student_id for update;
   if not found then raise exception 'CHALLENGE_NOT_FOUND'; end if;
@@ -1206,6 +1290,8 @@ alter table public.reward_challenges enable row level security;
 -- The previous broad update policy made coins writable by any owner or admin.
 -- PostgreSQL column grants keep the existing nickname/classroom flows while
 -- reserving coins for security-definer wallet RPCs.
+drop policy if exists students_insert_own on public.students;
+revoke insert on table public.students from public, anon, authenticated;
 drop policy if exists students_update_own on public.students;
 create policy students_update_own on public.students
   for update to authenticated
@@ -1239,6 +1325,7 @@ revoke all on function public.reward_coins_for_source(text, text) from public, a
 revoke all on function public.admin_deduct_student_coins(text, integer, uuid, integer) from public, anon, authenticated;
 revoke all on function public.claim_student_reward(uuid, text, text, date) from public, anon, authenticated;
 revoke all on function public.start_focus_reward_session(uuid, integer) from public, anon, authenticated;
+revoke all on function public.cancel_focus_reward_session(uuid) from public, anon, authenticated;
 revoke all on function public.ensure_daily_quest_assignments() from public, anon, authenticated;
 revoke all on function public.record_local_verification_attempt(uuid, text, text) from public, anon, authenticated;
 revoke all on function public.issue_reward_challenge(text, text) from public, anon, authenticated;
@@ -1251,6 +1338,7 @@ revoke all on function public.get_my_wallet() from public, anon, authenticated;
 revoke all on function public.get_my_coin_history(integer) from public, anon, authenticated;
 grant execute on function public.admin_deduct_student_coins(text, integer, uuid, integer) to authenticated;
 grant execute on function public.start_focus_reward_session(uuid, integer) to authenticated;
+grant execute on function public.cancel_focus_reward_session(uuid) to authenticated;
 grant execute on function public.ensure_daily_quest_assignments() to authenticated;
 grant execute on function public.record_local_verification_attempt(uuid, text, text) to authenticated;
 grant execute on function public.issue_reward_challenge(text, text) to authenticated;
