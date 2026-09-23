@@ -1,6 +1,6 @@
 begin;
 
-select plan(30);
+select plan(35);
 
 select is(
   (select count(*)::integer from public.shop_catalog_items where version = 1),
@@ -96,6 +96,11 @@ select lives_ok(
   $$update public.students set nickname = 'Wallet tester' where id = '00000000-0000-0000-0000-000000000011'$$,
   'student nickname updates remain allowed'
 );
+select throws_ok(
+  $$insert into public.chore_completions (id, student_id, quest_id, date) values ('30000000-0000-0000-0000-000000000012', '00000000-0000-0000-0000-000000000011', 'chore_sweep', '2026-09-23')$$,
+  '42501', 'permission denied for table chore_completions',
+  'direct reward-source inserts are rejected'
+);
 reset role;
 select throws_ok(
   $$select * from public.purchase_shop_item('hat_tophat', 1, '20000000-0000-0000-0000-000000000001')$$,
@@ -133,6 +138,23 @@ select results_eq(
 );
 select is((select count(*)::integer from public.coin_ledger where request_id = '30000000-0000-0000-0000-000000000001'), 1, 'reward replay writes one ledger row');
 
+select throws_ok(
+  $$select * from public.record_outdoor_completion('50000000-0000-0000-0000-000000000001', '40000000-0000-0000-0000-000000000011', 'outdoor-not-real')$$,
+  'P0001', 'INVALID_REWARD_SOURCE',
+  'invalid outdoor quest IDs cannot mint coins'
+);
+select results_eq(
+  $$select balance, replayed from public.record_outdoor_completion('50000000-0000-0000-0000-000000000002', '40000000-0000-0000-0000-000000000012', 'outdoor_walk')$$,
+  $$values (110::integer, false)$$,
+  'recorded outdoor completion creates and consumes one server source'
+);
+select results_eq(
+  $$select balance, replayed from public.record_outdoor_completion('50000000-0000-0000-0000-000000000002', '40000000-0000-0000-0000-000000000012', 'outdoor_walk')$$,
+  $$values (110::integer, true)$$,
+  'outdoor completion retry is idempotent'
+);
+select is((select count(*)::integer from public.coin_ledger where request_id = '50000000-0000-0000-0000-000000000002'), 1, 'outdoor retry writes one ledger row');
+
 select lives_ok(
   $$select * from public.import_legacy_inventory(array['hat_school', 'hat_school'], '40000000-0000-0000-0000-000000000001')$$,
   'legacy inventory import ignores duplicate known item IDs'
@@ -152,7 +174,7 @@ select results_eq(
   'reinstall restores the confirmed balance'
 );
 reset role;
-select is((select count(*)::integer from public.coin_ledger where student_id = '00000000-0000-0000-0000-000000000013'), 3, 'reinstall transfers ledger history to the new student ID');
+select is((select count(*)::integer from public.coin_ledger where student_id = '00000000-0000-0000-0000-000000000013'), 4, 'reinstall transfers ledger history to the new student ID');
 select is((select count(*)::integer from public.student_inventory where student_id = '00000000-0000-0000-0000-000000000013'), 1, 'reinstall transfers owned inventory to the new student ID');
 select is((select count(*)::integer from public.coin_ledger where student_id = '00000000-0000-0000-0000-000000000011'), 0, 'reinstall leaves no ledger history on the deleted student ID');
 

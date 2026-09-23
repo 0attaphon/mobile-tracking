@@ -441,6 +441,147 @@ begin
 end;
 $$;
 
+-- Source-recording RPCs are the only authenticated path into reward sources.
+-- They accept stable client UUIDs for retry, derive dates and coin values on
+-- the server, then consume the source through claim_student_reward in the
+-- same transaction.
+create or replace function public.record_focus_completion(
+  p_request_id uuid,
+  p_source_id uuid,
+  p_duration_minutes integer
+)
+returns public.wallet_transaction_result
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_student_id uuid := auth.uid();
+  v_source public.focus_sessions%rowtype;
+begin
+  if v_student_id is null then
+    raise exception 'NOT_AUTHENTICATED';
+  end if;
+  if p_request_id is null or p_source_id is null then
+    raise exception 'INVALID_REQUEST_ID';
+  end if;
+  if public.reward_coins_for_source('focus', 'focus:' || p_duration_minutes::text) is null then
+    raise exception 'INVALID_REWARD_SOURCE';
+  end if;
+
+  insert into public.focus_sessions (
+    id, student_id, duration_minutes, status, coins_earned, ended_at
+  ) values (
+    p_source_id, v_student_id, p_duration_minutes, 'completed', 0, now()
+  ) on conflict (id) do nothing;
+
+  select * into v_source
+  from public.focus_sessions
+  where id = p_source_id and student_id = v_student_id
+  for update;
+  if not found then
+    raise exception 'REWARD_SOURCE_NOT_FOUND';
+  end if;
+  if v_source.status <> 'completed' or v_source.duration_minutes <> p_duration_minutes then
+    raise exception 'IDEMPOTENCY_CONFLICT';
+  end if;
+
+  return public.claim_student_reward(p_request_id, 'focus', p_source_id::text, null);
+end;
+$$;
+
+create or replace function public.record_chore_completion(
+  p_request_id uuid,
+  p_source_id uuid,
+  p_quest_id text
+)
+returns public.wallet_transaction_result
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_student_id uuid := auth.uid();
+  v_source public.chore_completions%rowtype;
+  v_quest_id text := trim(coalesce(p_quest_id, ''));
+  v_date date := (now() at time zone 'Asia/Bangkok')::date;
+begin
+  if v_student_id is null then
+    raise exception 'NOT_AUTHENTICATED';
+  end if;
+  if p_request_id is null or p_source_id is null then
+    raise exception 'INVALID_REQUEST_ID';
+  end if;
+  if public.reward_coins_for_source('chore', v_quest_id) is null then
+    raise exception 'INVALID_REWARD_SOURCE';
+  end if;
+
+  insert into public.chore_completions (
+    id, student_id, quest_id, date, coins_earned, completed_at
+  ) values (
+    p_source_id, v_student_id, v_quest_id, v_date, 0, now()
+  ) on conflict (id) do nothing;
+
+  select * into v_source
+  from public.chore_completions
+  where id = p_source_id and student_id = v_student_id
+  for update;
+  if not found then
+    raise exception 'REWARD_SOURCE_NOT_FOUND';
+  end if;
+  if v_source.quest_id <> v_quest_id then
+    raise exception 'IDEMPOTENCY_CONFLICT';
+  end if;
+
+  return public.claim_student_reward(p_request_id, 'chore', p_source_id::text, null);
+end;
+$$;
+
+create or replace function public.record_outdoor_completion(
+  p_request_id uuid,
+  p_source_id uuid,
+  p_quest_id text
+)
+returns public.wallet_transaction_result
+language plpgsql
+security definer
+set search_path = public
+as $$
+declare
+  v_student_id uuid := auth.uid();
+  v_source public.outdoor_completions%rowtype;
+  v_quest_id text := trim(coalesce(p_quest_id, ''));
+  v_date date := (now() at time zone 'Asia/Bangkok')::date;
+begin
+  if v_student_id is null then
+    raise exception 'NOT_AUTHENTICATED';
+  end if;
+  if p_request_id is null or p_source_id is null then
+    raise exception 'INVALID_REQUEST_ID';
+  end if;
+  if public.reward_coins_for_source('outdoor', v_quest_id) is null then
+    raise exception 'INVALID_REWARD_SOURCE';
+  end if;
+
+  insert into public.outdoor_completions (id, student_id, quest_id, date)
+  values (p_source_id, v_student_id, v_quest_id, v_date)
+  on conflict (id) do nothing;
+
+  select * into v_source
+  from public.outdoor_completions
+  where id = p_source_id and student_id = v_student_id
+  for update;
+  if not found then
+    raise exception 'REWARD_SOURCE_NOT_FOUND';
+  end if;
+  if v_source.quest_id <> v_quest_id then
+    raise exception 'IDEMPOTENCY_CONFLICT';
+  end if;
+
+  return public.claim_student_reward(p_request_id, 'outdoor', p_source_id::text, null);
+end;
+$$;
+
 -- Replaces the prior device-restore implementation. Ledger and inventory use
 -- student_id foreign keys with delete cascades, so they must move before the
 -- replaced student row is deleted.
@@ -752,15 +893,26 @@ revoke all on table public.coin_ledger, public.student_inventory,
   from public, anon, authenticated;
 grant select on table public.coin_ledger, public.student_inventory to authenticated;
 
+-- Existing policies are kept for historical reads, but authenticated clients
+-- cannot fabricate a completed row to mint a reward.
+revoke insert on table public.focus_sessions, public.chore_completions
+  from public, anon, authenticated;
+
 revoke all on function public.reward_coins_for_source(text, text) from public, anon, authenticated;
 revoke all on function public.admin_deduct_student_coins(text, integer, uuid, integer) from public, anon, authenticated;
 revoke all on function public.claim_student_reward(uuid, text, text, date) from public, anon, authenticated;
+revoke all on function public.record_focus_completion(uuid, uuid, integer) from public, anon, authenticated;
+revoke all on function public.record_chore_completion(uuid, uuid, text) from public, anon, authenticated;
+revoke all on function public.record_outdoor_completion(uuid, uuid, text) from public, anon, authenticated;
 revoke all on function public.purchase_shop_item(text, integer, uuid) from public, anon, authenticated;
 revoke all on function public.import_legacy_inventory(text[], uuid) from public, anon, authenticated;
 revoke all on function public.get_my_wallet() from public, anon, authenticated;
 revoke all on function public.get_my_coin_history(integer) from public, anon, authenticated;
 grant execute on function public.admin_deduct_student_coins(text, integer, uuid, integer) to authenticated;
 grant execute on function public.claim_student_reward(uuid, text, text, date) to authenticated;
+grant execute on function public.record_focus_completion(uuid, uuid, integer) to authenticated;
+grant execute on function public.record_chore_completion(uuid, uuid, text) to authenticated;
+grant execute on function public.record_outdoor_completion(uuid, uuid, text) to authenticated;
 grant execute on function public.purchase_shop_item(text, integer, uuid) to authenticated;
 grant execute on function public.import_legacy_inventory(text[], uuid) to authenticated;
 grant execute on function public.get_my_wallet() to authenticated;
