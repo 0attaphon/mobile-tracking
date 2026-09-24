@@ -1,11 +1,58 @@
 begin;
 
-select plan(68);
+select plan(76);
 
 select is(
   (select count(*)::integer from public.shop_catalog_items where version = 1),
   69,
   'catalog version one seeds all 69 specified items'
+);
+
+select is(
+  (select sum(price)::integer from public.shop_catalog_items where version = 1),
+  12000,
+  'catalog version one totals exactly 12000 coins'
+);
+select is(
+  (select count(*)::integer from public.shop_catalog_versions where active),
+  1,
+  'only one catalog version is active'
+);
+select ok(
+  (select bool_and(price > 0) from public.shop_catalog_items),
+  'every seeded catalog price is positive'
+);
+select ok(
+  exists (select 1 from pg_constraint
+    where conrelid = 'public.shop_catalog_items'::regclass
+      and contype = 'c'
+      and pg_get_constraintdef(oid) like '%price > 0%'),
+  'catalog schema enforces positive prices'
+);
+select ok(
+  exists (select 1 from pg_constraint
+    where conrelid = 'public.coin_ledger'::regclass
+      and conname = 'coin_ledger_balance_non_negative'),
+  'ledger schema rejects negative resulting balances'
+);
+select ok(
+  exists (select 1 from pg_constraint
+    where conrelid = 'public.coin_ledger'::regclass
+      and conname = 'coin_ledger_balance_math'),
+  'ledger schema enforces balance arithmetic'
+);
+select ok(
+  exists (select 1 from pg_constraint
+    where conrelid = 'public.coin_ledger'::regclass
+      and contype = 'c'
+      and pg_get_constraintdef(oid) like '%transaction_type%'),
+  'ledger schema restricts transaction types'
+);
+select ok(
+  exists (select 1 from pg_constraint
+    where conrelid = 'public.student_inventory'::regclass
+      and contype = 'p'),
+  'inventory schema enforces one row per student and item'
 );
 
 insert into auth.users (
