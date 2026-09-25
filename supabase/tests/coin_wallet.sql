@@ -1,6 +1,6 @@
 begin;
 
-select plan(76);
+select plan(86);
 
 select is(
   (select count(*)::integer from public.shop_catalog_items where version = 1),
@@ -55,6 +55,19 @@ select ok(
   'inventory schema enforces one row per student and item'
 );
 
+select ok(
+  not has_function_privilege('public', 'public.increment_student_coins(integer)', 'execute'),
+  'PUBLIC cannot execute the legacy coin delta RPC'
+);
+select ok(
+  not has_function_privilege('anon', 'public.increment_student_coins(integer)', 'execute'),
+  'anonymous clients cannot execute the legacy coin delta RPC'
+);
+select ok(
+  not has_function_privilege('authenticated', 'public.increment_student_coins(integer)', 'execute'),
+  'authenticated clients cannot execute the legacy coin delta RPC'
+);
+
 insert into auth.users (
   id, instance_id, aud, role, email, encrypted_password, email_confirmed_at,
   raw_app_meta_data, raw_user_meta_data
@@ -62,11 +75,13 @@ insert into auth.users (
   ('00000000-0000-0000-0000-000000000001', '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', 'wallet-admin@example.test', 'not-used', now(), '{"provider":"email","providers":["email"]}'::jsonb, '{}'::jsonb),
   ('00000000-0000-0000-0000-000000000011', '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', 'wallet-student-one@example.test', 'not-used', now(), '{"provider":"email","providers":["email"]}'::jsonb, '{}'::jsonb),
   ('00000000-0000-0000-0000-000000000012', '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', 'wallet-student-two@example.test', 'not-used', now(), '{"provider":"email","providers":["email"]}'::jsonb, '{}'::jsonb),
-  ('00000000-0000-0000-0000-000000000013', '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', 'wallet-student-one-restored@example.test', 'not-used', now(), '{"provider":"email","providers":["email"]}'::jsonb, '{}'::jsonb);
+  ('00000000-0000-0000-0000-000000000013', '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', 'wallet-student-one-restored@example.test', 'not-used', now(), '{"provider":"email","providers":["email"]}'::jsonb, '{}'::jsonb),
+  ('00000000-0000-0000-0000-000000000014', '00000000-0000-0000-0000-000000000000', 'authenticated', 'authenticated', 'wallet-streak@example.test', 'not-used', now(), '{"provider":"email","providers":["email"]}'::jsonb, '{}'::jsonb);
 
 insert into public.students (id, student_id, device_id, coins) values
   ('00000000-0000-0000-0000-000000000011', 'STUDENT-ONE', 'wallet-device-one', 100),
-  ('00000000-0000-0000-0000-000000000012', 'STUDENT-TWO', 'wallet-device-two', 25);
+  ('00000000-0000-0000-0000-000000000012', 'STUDENT-TWO', 'wallet-device-two', 25),
+  ('00000000-0000-0000-0000-000000000014', 'STUDENT-STREAK', 'wallet-device-streak', 0);
 
 create temporary table wallet_test_challenges (
   name text primary key,
@@ -384,7 +399,7 @@ insert into wallet_test_challenges (name, nonce)
 select 'focus', nonce from public.issue_reward_challenge('focus', '70000000-0000-0000-0000-000000000001');
 select results_eq(
   $$select balance, replayed from public.record_focus_completion('70000000-0000-0000-0000-000000000002', (select nonce from wallet_test_challenges where name = 'focus'))$$,
-  $$values (40::integer, false)$$,
+  $$values (50::integer, false)$$,
   'elapsed focus challenge credits once'
 );
 select is(
@@ -409,7 +424,7 @@ create temporary table wallet_test_focus_end as
 select ended_at from public.focus_sessions where id = '70000000-0000-0000-0000-000000000001';
 select results_eq(
   $$select balance, replayed from public.record_focus_completion('70000000-0000-0000-0000-000000000002', (select nonce from wallet_test_challenges where name = 'focus'))$$,
-  $$values (40::integer, true)$$,
+  $$values (50::integer, true)$$,
   'cross-midnight focus completion retry returns the original result'
 );
 
@@ -443,6 +458,87 @@ select results_eq(
   'cancelled focus releases the student to start another reward session'
 );
 reset role;
+
+-- Streak rewards use the server-derived Bangkok completion date. Seven
+-- consecutive days earn one freeze token; a second session on milestone day
+-- earns base coins only; a later gap consumes the freeze before catch-up.
+select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-000000000014', true);
+insert into public.focus_sessions (
+  id, student_id, duration_minutes, status, coins_earned, started_at, ended_at
+)
+select fixture.source_id, '00000000-0000-0000-0000-000000000014', 30,
+  'completed', 0, fixture.ended_at - interval '30 minutes', fixture.ended_at
+from (
+  values
+    ('80000000-0000-0000-0000-000000000101'::uuid, (((clock_timestamp() at time zone 'Asia/Bangkok')::date - 10 + time '12:00') at time zone 'Asia/Bangkok')),
+    ('80000000-0000-0000-0000-000000000102'::uuid, (((clock_timestamp() at time zone 'Asia/Bangkok')::date - 9 + time '12:00') at time zone 'Asia/Bangkok')),
+    ('80000000-0000-0000-0000-000000000103'::uuid, (((clock_timestamp() at time zone 'Asia/Bangkok')::date - 8 + time '12:00') at time zone 'Asia/Bangkok')),
+    ('80000000-0000-0000-0000-000000000104'::uuid, (((clock_timestamp() at time zone 'Asia/Bangkok')::date - 7 + time '12:00') at time zone 'Asia/Bangkok')),
+    ('80000000-0000-0000-0000-000000000105'::uuid, (((clock_timestamp() at time zone 'Asia/Bangkok')::date - 6 + time '12:00') at time zone 'Asia/Bangkok')),
+    ('80000000-0000-0000-0000-000000000106'::uuid, (((clock_timestamp() at time zone 'Asia/Bangkok')::date - 5 + time '12:00') at time zone 'Asia/Bangkok')),
+    ('80000000-0000-0000-0000-000000000107'::uuid, (((clock_timestamp() at time zone 'Asia/Bangkok')::date - 4 + time '12:00') at time zone 'Asia/Bangkok')),
+    ('80000000-0000-0000-0000-000000000108'::uuid, (((clock_timestamp() at time zone 'Asia/Bangkok')::date - 4 + time '16:00') at time zone 'Asia/Bangkok')),
+    ('80000000-0000-0000-0000-000000000109'::uuid, (((clock_timestamp() at time zone 'Asia/Bangkok')::date - 2 + time '12:00') at time zone 'Asia/Bangkok')),
+    ('80000000-0000-0000-0000-000000000110'::uuid, (((clock_timestamp() at time zone 'Asia/Bangkok')::date + time '12:00') at time zone 'Asia/Bangkok'))
+) as fixture(source_id, ended_at);
+
+do $$
+begin
+  perform public.claim_student_reward('81000000-0000-0000-0000-000000000101', 'focus', '80000000-0000-0000-0000-000000000101', null);
+  perform public.claim_student_reward('81000000-0000-0000-0000-000000000102', 'focus', '80000000-0000-0000-0000-000000000102', null);
+  perform public.claim_student_reward('81000000-0000-0000-0000-000000000103', 'focus', '80000000-0000-0000-0000-000000000103', null);
+  perform public.claim_student_reward('81000000-0000-0000-0000-000000000104', 'focus', '80000000-0000-0000-0000-000000000104', null);
+  perform public.claim_student_reward('81000000-0000-0000-0000-000000000105', 'focus', '80000000-0000-0000-0000-000000000105', null);
+  perform public.claim_student_reward('81000000-0000-0000-0000-000000000106', 'focus', '80000000-0000-0000-0000-000000000106', null);
+  perform public.claim_student_reward('81000000-0000-0000-0000-000000000107', 'focus', '80000000-0000-0000-0000-000000000107', null);
+  perform public.claim_student_reward('81000000-0000-0000-0000-000000000108', 'focus', '80000000-0000-0000-0000-000000000108', null);
+  perform public.claim_student_reward('81000000-0000-0000-0000-000000000109', 'focus', '80000000-0000-0000-0000-000000000109', null);
+  perform public.claim_student_reward('81000000-0000-0000-0000-000000000110', 'focus', '80000000-0000-0000-0000-000000000110', null);
+end;
+$$;
+
+select is(
+  (select coins from public.students where id = '00000000-0000-0000-0000-000000000014'),
+  315,
+  'server-owned focus rules apply streak, freeze, and catch-up rewards'
+);
+select is(
+  (select delta from public.coin_ledger where request_id = '81000000-0000-0000-0000-000000000107'),
+  115,
+  'day-seven milestone adds its 100-coin bonus'
+);
+select results_eq(
+  $$select delta, (metadata ->> 'streak_advanced')::boolean
+    from public.coin_ledger where request_id = '81000000-0000-0000-0000-000000000108'$$,
+  $$values (15::integer, false)$$,
+  'a second focus on the same Bangkok milestone day earns base coins only'
+);
+select is(
+  (select sum((metadata ->> 'streak_bonus')::integer)::integer
+   from public.coin_ledger
+   where student_id = '00000000-0000-0000-0000-000000000014'
+     and source_date = (clock_timestamp() at time zone 'Asia/Bangkok')::date - 4),
+  100,
+  'a focus milestone pays at most once per Bangkok calendar day'
+);
+select results_eq(
+  $$select delta, (metadata ->> 'freeze_used')::boolean
+    from public.coin_ledger where request_id = '81000000-0000-0000-0000-000000000109'$$,
+  $$values (15::integer, true)$$,
+  'a streak gap consumes an earned freeze before resetting the streak'
+);
+select results_eq(
+  $$select delta, (metadata ->> 'catch_up_applied')::boolean
+    from public.coin_ledger where request_id = '81000000-0000-0000-0000-000000000110'$$,
+  $$values (40::integer, true)$$,
+  'a later unprotected gap doubles base coins once for catch-up'
+);
+select results_eq(
+  $$select current_streak, longest_streak, last_focus_date, freeze_tokens
+    from public.student_focus_reward_state where student_id = '00000000-0000-0000-0000-000000000014'$$,
+  $$values (1::integer, 8::integer, (clock_timestamp() at time zone 'Asia/Bangkok')::date, 0::integer)$$,
+  'server persists the resulting streak and freeze state'
+);
 
 select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-000000000011', true);
 select lives_ok(
