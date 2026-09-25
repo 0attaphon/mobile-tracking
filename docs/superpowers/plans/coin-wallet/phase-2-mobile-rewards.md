@@ -8,18 +8,18 @@
 
 ### Task 2.1: Vitest and Serialized Queue
 
-- [ ] Add `"test": "vitest run"` and Vitest.
-- [ ] Write failing tests: concurrent enqueues survive; duplicate request IDs collapse; failed flush preserves; successful replay removes; students are isolated; enqueue during flush survives.
-- [ ] Implement versioned storage at `supabase-pending-rewards-v2` with one module-level promise chain around all read/modify/write operations.
-- [ ] Preserve request IDs across retries and other students' queues.
-- [ ] Run focused tests and commit: `feat: queue idempotent wallet rewards`.
+- [x] Add `"test": "vitest run"` and Vitest.
+- [x] Write failing tests: concurrent enqueues survive; duplicate request IDs collapse; failed flush preserves; successful replay removes; students are isolated; enqueue during flush survives.
+- [x] Implement versioned storage at `supabase-pending-rewards-v2` with one module-level promise chain around all read/modify/write operations.
+- [x] Preserve request IDs across retries and other students' queues.
+- [x] Run focused tests and commit: `feat: queue idempotent wallet rewards` (`a50d980`).
 
 ### Task 2.2: Typed Wallet Client
 
-- [ ] Test claim success, replay, offline behavior, and stable error mapping.
-- [ ] Implement `claimStudentReward`, `fetchWallet`, `enqueueReward`, and `flushPendingRewards`.
-- [ ] Map server failures to master-plan error codes; UI must not parse raw error strings.
-- [ ] Run focused tests and commit: `feat: add typed mobile wallet client`.
+- [x] Test claim success, replay, offline behavior, and stable error mapping.
+- [x] Implement `claimStudentReward`, `fetchWallet`, `enqueueReward`, and `flushPendingRewards`.
+- [x] Map server failures to master-plan error codes; UI must not parse raw error strings.
+- [x] Run focused tests and commit: `feat: add typed mobile wallet client`.
 
 Required signatures:
 
