@@ -70,6 +70,10 @@ async function getStudentAuthId(): Promise<string | null> {
 }
 
 async function pushItem(studentId: string, item: PendingItem): Promise<boolean> {
+  // An old delta may have succeeded remotely before the client lost its
+  // response. Never guess, delete, or replay it through either wallet path.
+  if (item.type === 'coin_delta') return false
+
   if (item.type === 'focus_session') {
     const { error } = await supabase.from('focus_sessions').insert({
       student_id: studentId,
@@ -108,10 +112,16 @@ async function pushItem(studentId: string, item: PendingItem): Promise<boolean> 
     return !error
   }
 
-  const { error } = await supabase.rpc('increment_student_coins', {
-    p_delta: item.payload.delta,
-  })
-  return !error
+  return false
+}
+
+export async function getLegacyCoinQueueStatus(): Promise<{
+  state: 'ready' | 'legacy_pending'
+  count: number
+}> {
+  const queue = await loadQueue()
+  const count = queue.filter((item) => item.type === 'coin_delta').length
+  return { state: count > 0 ? 'legacy_pending' : 'ready', count }
 }
 
 export async function flushSyncQueue(): Promise<void> {
@@ -194,8 +204,7 @@ export async function syncChoreCompletion(input: {
 }
 
 export async function syncCoinDelta(delta: number): Promise<void> {
-  if (delta === 0) return
-  await syncOrQueue({ type: 'coin_delta', payload: { delta } })
+  if (delta !== 0) throw new Error('LEGACY_COIN_DELTA_DISABLED')
 }
 
 export async function syncNickname(nickname: string): Promise<void> {

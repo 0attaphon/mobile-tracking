@@ -73,6 +73,119 @@ function requireConfigured(): void {
   if (!isSupabaseConfigured) throw new WalletError('OFFLINE')
 }
 
+async function runWalletRpc(name: string, parameters: Record<string, unknown>): Promise<unknown> {
+  requireConfigured()
+  try {
+    const { data, error } = await supabase.rpc(name, parameters)
+    if (error) throw error
+    return data
+  } catch (error) {
+    throw toWalletError(error)
+  }
+}
+
+export async function startFocusRewardSession(
+  sourceId: string,
+  durationMinutes: number
+): Promise<void> {
+  await runWalletRpc('start_focus_reward_session', {
+    p_source_id: sourceId,
+    p_duration_minutes: durationMinutes,
+  })
+}
+
+export async function cancelFocusRewardSession(sourceId: string): Promise<void> {
+  await runWalletRpc('cancel_focus_reward_session', { p_source_id: sourceId })
+}
+
+export async function recordLocalVerificationAttempt(
+  attemptId: string,
+  rewardType: 'chore' | 'outdoor',
+  questId: string
+): Promise<void> {
+  await runWalletRpc('record_local_verification_attempt', {
+    p_attempt_id: attemptId,
+    p_reward_type: rewardType,
+    p_quest_id: questId,
+  })
+}
+
+export type DailyQuestAssignment = {
+  rewardType: 'chore' | 'outdoor'
+  questId: string
+  sourceDate: string
+  position: number
+}
+
+export async function ensureDailyQuestAssignments(): Promise<DailyQuestAssignment[]> {
+  const data = await runWalletRpc('ensure_daily_quest_assignments', {})
+  if (!Array.isArray(data)) {
+    throw new WalletError('UNKNOWN', 'INVALID_QUEST_ASSIGNMENTS_RESPONSE')
+  }
+
+  return data.map((value) => {
+    const row = value && typeof value === 'object' ? (value as Record<string, unknown>) : null
+    if (
+      !row ||
+      (row.reward_type !== 'chore' && row.reward_type !== 'outdoor') ||
+      typeof row.quest_id !== 'string' ||
+      typeof row.source_date !== 'string' ||
+      typeof row.position !== 'number' ||
+      !Number.isInteger(row.position)
+    ) {
+      throw new WalletError('UNKNOWN', 'INVALID_QUEST_ASSIGNMENTS_RESPONSE')
+    }
+
+    return {
+      rewardType: row.reward_type,
+      questId: row.quest_id,
+      sourceDate: row.source_date,
+      position: row.position,
+    }
+  })
+}
+
+export async function issueRewardChallenge(
+  rewardType: PendingReward['rewardType'],
+  sourceId: string
+): Promise<{ nonce: string; expiresAt: string; replayed: boolean }> {
+  const data = await runWalletRpc('issue_reward_challenge', {
+    p_reward_type: rewardType,
+    p_source_id: sourceId,
+  })
+  const row = firstRow(data)
+  if (
+    !row ||
+    typeof row.nonce !== 'string' ||
+    typeof row.expires_at !== 'string' ||
+    typeof row.replayed !== 'boolean'
+  ) {
+    throw new WalletError('UNKNOWN', 'INVALID_CHALLENGE_RESPONSE')
+  }
+  return { nonce: row.nonce, expiresAt: row.expires_at, replayed: row.replayed }
+}
+
+export async function createPendingReward(input: {
+  requestId: string
+  rewardType: PendingReward['rewardType']
+  challengeNonce: string
+  sourceDate: string
+  createdAt: string
+}): Promise<PendingReward> {
+  requireConfigured()
+  const { data } = await supabase.auth.getSession()
+  const studentId = data.session?.user.id
+  if (!studentId) throw new WalletError('UNKNOWN', 'NOT_AUTHENTICATED')
+  return {
+    requestId: input.requestId,
+    studentId,
+    rewardType: input.rewardType,
+    sourceId: input.challengeNonce,
+    sourceDate: input.sourceDate,
+    createdAt: input.createdAt,
+  }
+}
+
 export async function claimStudentReward(reward: PendingReward): Promise<WalletClaimResult> {
   requireConfigured()
   const rpcName = {

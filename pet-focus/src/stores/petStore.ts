@@ -8,7 +8,15 @@ import {
   PetId,
   getPetCatalogEntry,
 } from '@/types/pet'
-import { syncCoinDelta } from '@/services/supabase/sync'
+import {
+  enqueueReward,
+  fetchWallet,
+  flushPendingRewards,
+} from '@/services/supabase/wallet'
+import { listPendingRewards, PendingReward } from '@/services/supabase/pendingRewards'
+
+type WalletMigrationState = 'checking' | 'ready' | 'legacy_pending'
+
 interface PetState {
   name: string
   species: 'cat' | 'dog' | 'rabbit' | 'hamster'
@@ -17,6 +25,11 @@ interface PetState {
   exp: number
   happiness: number
   coins: number
+  confirmedCoins: number
+  pendingRewardCoins: number
+  pendingRewardAmounts: Record<string, number>
+  walletMigrationState: WalletMigrationState
+  walletRequestVersion: number
   equippedItems: string[]
   _hasHydrated: boolean
   addExp: (amount: number) => void
@@ -24,6 +37,10 @@ interface PetState {
   addCoins: (amount: number) => void
   spendCoins: (amount: number) => boolean
   hydrateCoins: (coins: number) => void
+  queueReward: (reward: PendingReward, amount: number) => Promise<void>
+  refreshWallet: () => Promise<void>
+  flushWalletRewards: (studentId: string) => Promise<void>
+  setWalletMigrationState: (state: WalletMigrationState) => void
   equipItem: (itemId: string) => void
   setPetName: (name: string) => void
   setActivePet: (petId: PetId) => void
@@ -40,6 +57,11 @@ export const usePetStore = create<PetState>()(
       exp: 0,
       happiness: 80,
       coins: 0,
+      confirmedCoins: 0,
+      pendingRewardCoins: 0,
+      pendingRewardAmounts: {},
+      walletMigrationState: 'checking',
+      walletRequestVersion: 0,
       equippedItems: [],
       _hasHydrated: false,
 
@@ -60,20 +82,88 @@ export const usePetStore = create<PetState>()(
         })),
 
       addCoins: (amount) => {
-        set((state) => ({ coins: state.coins + amount }))
-        syncCoinDelta(amount)
+        if (__DEV__) {
+          console.warn('[petStore.addCoins] ignored: rewards require an issued server challenge')
+        }
       },
 
       spendCoins: (amount) => {
         if (amount <= 0) return true
-        const { coins } = get()
-        if (coins < amount) return false
-        set({ coins: coins - amount })
-        syncCoinDelta(-amount)
+        const { confirmedCoins, pendingRewardCoins } = get()
+        if (confirmedCoins < amount) return false
+        const nextConfirmed = confirmedCoins - amount
+        set({
+          confirmedCoins: nextConfirmed,
+          coins: nextConfirmed + pendingRewardCoins,
+        })
         return true
       },
 
-      hydrateCoins: (coins) => set({ coins }),
+      hydrateCoins: (confirmedCoins) =>
+        set((state) => ({
+          confirmedCoins,
+          coins: confirmedCoins + state.pendingRewardCoins,
+        })),
+
+      queueReward: async (reward, amount) => {
+        if (!Number.isSafeInteger(amount) || amount <= 0) return
+        await enqueueReward(reward)
+        set((state) => {
+          if (state.pendingRewardAmounts[reward.requestId] !== undefined) return state
+          const pendingRewardAmounts = {
+            ...state.pendingRewardAmounts,
+            [reward.requestId]: amount,
+          }
+          const pendingRewardCoins = Object.values(pendingRewardAmounts).reduce(
+            (sum, value) => sum + value,
+            0
+          )
+          return {
+            pendingRewardAmounts,
+            pendingRewardCoins,
+            coins: state.confirmedCoins + pendingRewardCoins,
+          }
+        })
+      },
+
+      refreshWallet: async () => {
+        const walletRequestVersion = get().walletRequestVersion + 1
+        set({ walletRequestVersion })
+        const wallet = await fetchWallet()
+        if (get().walletRequestVersion !== walletRequestVersion) return
+        set((state) => ({
+          confirmedCoins: wallet.confirmedBalance,
+          coins: wallet.confirmedBalance + state.pendingRewardCoins,
+        }))
+      },
+
+      flushWalletRewards: async (studentId) => {
+        const walletRequestVersion = get().walletRequestVersion + 1
+        set({ walletRequestVersion })
+        const result = await flushPendingRewards(studentId)
+        const remaining = await listPendingRewards(studentId)
+        if (get().walletRequestVersion !== walletRequestVersion) return
+        const remainingIds = new Set(remaining.map((reward) => reward.requestId))
+        set((state) => {
+          const pendingRewardAmounts = Object.fromEntries(
+            Object.entries(state.pendingRewardAmounts).filter(([requestId]) =>
+              remainingIds.has(requestId)
+            )
+          )
+          const pendingRewardCoins = Object.values(pendingRewardAmounts).reduce(
+            (sum, value) => sum + value,
+            0
+          )
+          return {
+            confirmedCoins: result.confirmedBalance,
+            pendingRewardAmounts,
+            pendingRewardCoins,
+            coins: result.confirmedBalance + pendingRewardCoins,
+          }
+        })
+      },
+
+      setWalletMigrationState: (walletMigrationState) => set({ walletMigrationState }),
 
       equipItem: (itemId) =>
         set((state) => ({
@@ -99,6 +189,10 @@ export const usePetStore = create<PetState>()(
         activePetId: state.activePetId,
         species: state.species,
         coins: state.coins,
+        confirmedCoins: state.confirmedCoins,
+        pendingRewardCoins: state.pendingRewardCoins,
+        pendingRewardAmounts: state.pendingRewardAmounts,
+        walletMigrationState: state.walletMigrationState,
         equippedItems: state.equippedItems,
       }),
       onRehydrateStorage: () => (state) => {

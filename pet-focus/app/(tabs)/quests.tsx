@@ -11,6 +11,8 @@ import { useIdentityStore } from '@/stores/identityStore'
 export default function QuestsScreen() {
   const router = useRouter()
   const coins = usePetStore((s) => s.coins)
+  const pendingRewardCoins = usePetStore((s) => s.pendingRewardCoins)
+  const walletMigrationState = usePetStore((s) => s.walletMigrationState)
   const faceEnrolled = useIdentityStore((s) => s.faceEnrolled)
   const { text, textSecondary } = useAppTheme()
 
@@ -22,9 +24,19 @@ export default function QuestsScreen() {
             <Text style={{ color: text }} className="text-2xl font-bold">เควสทำงานบ้าน</Text>
             <Text style={{ color: textSecondary }} className="text-sm mt-1">ทำเควสรายวัน รับเหรียญ ⭐</Text>
           </View>
-          <View className="flex-row items-center gap-1 px-3 py-1.5 rounded-full bg-white/10">
-            <EmojiIcon name="star" size={14} />
-            <Text className="text-accent font-bold text-xs">{coins}</Text>
+          <View className="items-end px-3 py-1.5 rounded-full bg-white/10">
+            <View className="flex-row items-center gap-1">
+              <EmojiIcon name="star" size={14} />
+              <Text className="text-accent font-bold text-xs">{coins}</Text>
+            </View>
+            {pendingRewardCoins > 0 && (
+              <Text style={{ color: textSecondary }} className="text-[9px]">
+                +{pendingRewardCoins} รอยืนยัน
+              </Text>
+            )}
+            {walletMigrationState === 'legacy_pending' && (
+              <Text className="text-orange-300 text-[9px]">กำลังย้ายยอดเดิม</Text>
+            )}
           </View>
         </View>
 

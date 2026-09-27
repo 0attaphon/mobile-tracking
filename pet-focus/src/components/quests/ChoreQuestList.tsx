@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react'
+import * as Crypto from 'expo-crypto'
 import {
   View,
   Text,
@@ -14,22 +15,33 @@ import { useIdentityStore } from '@/stores/identityStore'
 import { verifyChorePhoto } from '@/services/choreVerifier'
 import { useAppTheme } from '@/hooks/useAppTheme'
 import { CameraCaptureModal } from '@/components/camera/CameraCaptureModal'
+import {
+  createPendingReward,
+  issueRewardChallenge,
+  recordLocalVerificationAttempt,
+} from '@/services/supabase/wallet'
+import { syncWalletAfterAuthentication } from '@/services/supabase/walletSync'
+import { todayKey } from '@/utils/imageTensor'
 
 export function ChoreQuestList() {
   const router = useRouter()
   const { surface, border, textSecondary } = useAppTheme()
   const faceEnrolled = useIdentityStore((s) => s.faceEnrolled)
   const todayQuestIds = useChoreQuestStore((s) => s.todayQuestIds)
-  const ensureToday = useChoreQuestStore((s) => s.ensureToday)
+  const assignmentStatus = useChoreQuestStore((s) => s.assignmentStatus)
+  const refreshTodayAssignments = useChoreQuestStore((s) => s.refreshTodayAssignments)
   const getQuestProgress = useChoreQuestStore((s) => s.getQuestProgress)
+  const getOrCreateVerificationAttemptId = useChoreQuestStore(
+    (s) => s.getOrCreateVerificationAttemptId
+  )
   const recordAttempt = useChoreQuestStore((s) => s.recordAttempt)
   const completeQuest = useChoreQuestStore((s) => s.completeQuest)
   const [activeQuestId, setActiveQuestId] = useState<string | null>(null)
   const [cameraQuestId, setCameraQuestId] = useState<string | null>(null)
 
   useEffect(() => {
-    ensureToday()
-  }, [ensureToday])
+    refreshTodayAssignments().catch(() => {})
+  }, [refreshTodayAssignments])
 
   function promptFaceEnroll() {
     Alert.alert(
@@ -55,13 +67,28 @@ export function ChoreQuestList() {
       recordAttempt(questId, result.passed, result.reason)
 
       if (result.passed) {
-        completeQuest(quest)
+        const attemptId = getOrCreateVerificationAttemptId(questId)
+        await recordLocalVerificationAttempt(attemptId, 'chore', questId)
+        const challenge = await issueRewardChallenge('chore', attemptId)
+        const reward = await createPendingReward({
+          requestId: Crypto.randomUUID(),
+          rewardType: 'chore',
+          challengeNonce: challenge.nonce,
+          sourceDate: todayKey(),
+          createdAt: new Date().toISOString(),
+        })
+        const completed = await completeQuest(quest, reward)
+        if (!completed) return
+        syncWalletAfterAuthentication().catch(() => {})
         Alert.alert('สำเร็จ! 🎉', `ผ่านเควส "${quest.title}" ได้ ${quest.reward.coins} ⭐`)
       } else {
         Alert.alert('ยังไม่ผ่าน', result.reason ?? 'ลองถ่ายใหม่ให้เห็นทั้งใบหน้าและงานที่ทำ')
       }
     } catch {
-      Alert.alert('ผิดพลาด', 'วิเคราะห์รูปไม่สำเร็จ ลองใหม่อีกครั้ง')
+      Alert.alert(
+        'ยังยืนยันรางวัลไม่ได้',
+        'ตรวจสอบอินเทอร์เน็ตแล้วลองอีกครั้ง ระบบจะไม่ทำเครื่องหมายว่าสำเร็จจนกว่าจะบันทึกรางวัลได้'
+      )
     } finally {
       setActiveQuestId(null)
     }
@@ -87,6 +114,26 @@ export function ChoreQuestList() {
 
   const activeCameraQuest = CHORE_QUESTS.find((q) => q.id === cameraQuestId)
   const todayQuests = CHORE_QUESTS.filter((q) => todayQuestIds.includes(q.id))
+
+  if (assignmentStatus === 'idle' || assignmentStatus === 'loading') {
+    return <ActivityIndicator color="#9FE870" className="mt-8" />
+  }
+
+  if (assignmentStatus === 'error') {
+    return (
+      <View className="items-center px-4 py-8">
+        <Text style={{ color: textSecondary }} className="text-center mb-4">
+          โหลดเควสวันนี้ไม่ได้ กรุณาเชื่อมต่ออินเทอร์เน็ต
+        </Text>
+        <TouchableOpacity
+          onPress={() => refreshTodayAssignments().catch(() => {})}
+          className="rounded-xl bg-accent px-5 py-3"
+        >
+          <Text className="text-background font-bold">ลองใหม่</Text>
+        </TouchableOpacity>
+      </View>
+    )
+  }
 
   return (
     <>

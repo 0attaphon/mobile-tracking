@@ -19,7 +19,7 @@
 - [x] Test claim success, replay, offline behavior, and stable error mapping.
 - [x] Implement `claimStudentReward`, `fetchWallet`, `enqueueReward`, and `flushPendingRewards`.
 - [x] Map server failures to master-plan error codes; UI must not parse raw error strings.
-- [x] Run focused tests and commit: `feat: add typed mobile wallet client`.
+- [x] Run focused tests and commit: `feat: add typed mobile wallet client` (`3932459`).
 
 Required signatures:
 
@@ -37,13 +37,13 @@ fetchWallet(): Promise<{
 
 ### Task 2.3: Store and Sync Integration
 
-- [ ] Test `confirmedCoins`, `pendingRewardCoins`, and display `coins = confirmed + pending`.
-- [ ] Enqueue a stable request before showing an optimistic pending reward.
-- [ ] Use only confirmed coins for spending; label pending rewards `รอยืนยัน`.
-- [ ] Remove new uses of `syncCoinDelta`; do not use `spendCoins` for purchases.
-- [ ] Detect the legacy delta queue separately: never guess whether an unanswered delta succeeded and never replay it through the v2 reward path; expose a migration-not-ready state until the documented transition clears it.
-- [ ] Flush after authenticated restoration and reconnect; ignore stale responses older than the newest wallet refresh.
-- [ ] Run the phase gate and commit: `feat: sync rewards through wallet requests`.
+- [x] Test `confirmedCoins`, `pendingRewardCoins`, and display `coins = confirmed + pending`.
+- [x] Enqueue a stable request before showing an optimistic pending reward.
+- [x] Use only confirmed coins for spending; label pending rewards `รอยืนยัน`.
+- [x] Remove new uses of `syncCoinDelta`; do not use `spendCoins` for purchases.
+- [x] Detect the legacy delta queue separately: never guess whether an unanswered delta succeeded and never replay it through the v2 reward path; expose a migration-not-ready state until the documented transition clears it.
+- [x] Flush after authenticated restoration and reconnect; ignore stale responses older than the newest wallet refresh.
+- [x] Run the phase gate and commit: `feat: sync rewards through wallet requests`.
 
 ## Phase Gate
 

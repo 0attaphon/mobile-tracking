@@ -1,11 +1,19 @@
 import { useEffect, useRef, useState } from 'react'
 import { Alert, Platform } from 'react-native'
+import * as Crypto from 'expo-crypto'
 import { useFocusStore, getCoinsForDuration } from '@/stores/focusStore'
 import { usePetStore } from '@/stores/petStore'
 import { startFocusTimer, stopFocusTimer } from '@/services/focusTimer'
 import { requestUsageStatsPermission, checkUsageStatsPermission } from '@/services/usageStats'
 import { requestNotificationPermission } from '@/services/permissions'
-import { syncFocusSession } from '@/services/supabase/sync'
+import {
+  cancelFocusRewardSession,
+  createPendingReward,
+  issueRewardChallenge,
+  startFocusRewardSession,
+} from '@/services/supabase/wallet'
+import { syncWalletAfterAuthentication } from '@/services/supabase/walletSync'
+import { todayKey } from '@/utils/imageTensor'
 
 import { DEFAULT_BLOCKED_APPS } from '@/types/focus'
 
@@ -43,7 +51,6 @@ export function useFocusSession() {
     isPaused,
     selectedMinutes,
     remainingSeconds,
-    sessionStartTime,
     startSession,
     tickSecond,
     pauseSession,
@@ -54,11 +61,12 @@ export function useFocusSession() {
     selectDuration,
   } = useFocusStore()
 
-  const { addCoins, addExp, updateHappiness } = usePetStore()
+  const { queueReward, addExp, updateHappiness } = usePetStore()
 
   // Guards the session outcome so it fires exactly once, regardless of which
   // path (native complete event, native tick, or JS-fallback tick) reaches 0.
   const settledRef = useRef(false)
+  const rewardSourceIdRef = useRef<string | null>(null)
 
   const [lastReward, setLastReward] = useState<{
     coins: number
@@ -98,7 +106,7 @@ export function useFocusSession() {
     }
   }, [status])
 
-  function handleComplete() {
+  async function handleComplete() {
     if (settledRef.current) return
     const s = useFocusStore.getState().status
     if (s !== 'in_progress' && s !== 'completed') return
@@ -108,16 +116,30 @@ export function useFocusSession() {
     const { streakBonus, catchUpApplied } = completeSession()
     const baseCoins = getCoinsForDuration(selectedMinutes)
     const coins = baseCoins * (catchUpApplied ? 2 : 1) + streakBonus
-    addCoins(coins)
-    addExp(coins * 2)
-    updateHappiness(10)
-    setLastReward({ coins, streakBonus, catchUpApplied, usedFreeze })
-    syncFocusSession({
-      durationMinutes: selectedMinutes,
-      status: 'completed',
-      coinsEarned: coins,
-      startedAt: sessionStartTime,
-    }).catch(() => { })
+    const sourceId = rewardSourceIdRef.current
+    if (!sourceId) return
+    try {
+      const challenge = await issueRewardChallenge('focus', sourceId)
+      const now = new Date().toISOString()
+      const reward = await createPendingReward({
+        requestId: Crypto.randomUUID(),
+        rewardType: 'focus',
+        challengeNonce: challenge.nonce,
+        sourceDate: todayKey(),
+        createdAt: now,
+      })
+      await queueReward(reward, coins)
+      rewardSourceIdRef.current = null
+      addExp(coins * 2)
+      updateHappiness(10)
+      setLastReward({ coins, streakBonus, catchUpApplied, usedFreeze })
+      syncWalletAfterAuthentication().catch(() => {})
+    } catch {
+      Alert.alert(
+        'ยังยืนยันรางวัลไม่ได้',
+        'รางวัล Focus ต้องยืนยันกับเซิร์ฟเวอร์ ลองเชื่อมต่ออินเทอร์เน็ตแล้วเริ่มรอบใหม่'
+      )
+    }
   }
 
   function handleFail() {
@@ -126,12 +148,9 @@ export function useFocusSession() {
     settledRef.current = true
     stopFocusTimer().catch(() => { })
     failSession()
-    syncFocusSession({
-      durationMinutes: selectedMinutes,
-      status: 'failed',
-      coinsEarned: 0,
-      startedAt: sessionStartTime,
-    }).catch(() => { })
+    const sourceId = rewardSourceIdRef.current
+    rewardSourceIdRef.current = null
+    if (sourceId) cancelFocusRewardSession(sourceId).catch(() => {})
   }
 
   async function begin() {
@@ -149,17 +168,24 @@ export function useFocusSession() {
     }
     const usageOk = await checkAndPromptUsageAccess()
     if (!usageOk) return
-    startSession()
+    const sourceId = Crypto.randomUUID()
+    try {
+      await startFocusRewardSession(sourceId, selectedMinutes)
+      rewardSourceIdRef.current = sourceId
+      startSession()
+    } catch {
+      Alert.alert(
+        'ต้องเชื่อมต่ออินเทอร์เน็ต',
+        'ต้องยืนยันการเริ่ม Focus กับเซิร์ฟเวอร์ก่อน จึงจะรับรางวัลได้'
+      )
+    }
   }
 
   function cancel() {
     stopFocusTimer().catch(() => { })
-    syncFocusSession({
-      durationMinutes: selectedMinutes,
-      status: 'cancelled',
-      coinsEarned: 0,
-      startedAt: sessionStartTime,
-    }).catch(() => { })
+    const sourceId = rewardSourceIdRef.current
+    rewardSourceIdRef.current = null
+    if (sourceId) cancelFocusRewardSession(sourceId).catch(() => {})
     resetSession()
   }
 

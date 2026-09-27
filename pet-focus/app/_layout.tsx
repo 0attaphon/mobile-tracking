@@ -7,26 +7,15 @@ import { SafeAreaProvider } from 'react-native-safe-area-context'
 import { Buffer } from 'buffer'
 import { IdentityGate } from '@/components/onboarding/IdentityGate'
 import { requestNotificationPermission } from '@/services/permissions'
-import { usePetStore } from '@/stores/petStore'
 
 if (typeof global.Buffer === 'undefined') {
   global.Buffer = Buffer
 }
 
 export default function RootLayout() {
-  const petHydrated = usePetStore((s) => s._hasHydrated)
-
   useEffect(() => {
     requestNotificationPermission()
   }, [])
-
-  useEffect(() => {
-    // Dev convenience: seed coins only when the wallet is empty, so it never
-    // wipes a balance you're actively testing spending/earning against.
-    if (__DEV__ && petHydrated && usePetStore.getState().coins === 0) {
-      usePetStore.setState({ coins: 10000 })
-    }
-  }, [petHydrated])
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>

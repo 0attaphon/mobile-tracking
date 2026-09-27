@@ -69,7 +69,7 @@ Stable errors: `ADMIN_REQUIRED`, `STUDENT_NOT_FOUND`, `INSUFFICIENT_COINS`, `BAL
 
 - [x] [Phase 1 — Database Contract and Security](coin-wallet/phase-1-database-security.md)
   - Gate: pgTAP passes; direct student creation and overlapping focus sessions are denied.
-- [ ] [Phase 2 — Mobile Reward Wallet](coin-wallet/phase-2-mobile-rewards.md)
+- [x] [Phase 2 — Mobile Reward Wallet](coin-wallet/phase-2-mobile-rewards.md)
   - Requires Phase 1. Gate: queue tests and typecheck pass.
 - [ ] [Phase 3 — Inventory, Purchases, and Student History](coin-wallet/phase-3-shop-inventory.md)
   - Requires Phases 1–2. Gate: mobile tests, typecheck, and Android smoke checks pass.

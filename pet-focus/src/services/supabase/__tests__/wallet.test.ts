@@ -28,10 +28,16 @@ vi.mock('../client', () => ({
 
 import {
   WalletError,
+  cancelFocusRewardSession,
   claimStudentReward,
+  createPendingReward,
+  ensureDailyQuestAssignments,
   enqueueReward,
   fetchWallet,
   flushPendingRewards,
+  issueRewardChallenge,
+  recordLocalVerificationAttempt,
+  startFocusRewardSession,
 } from '../wallet'
 import type { PendingReward } from '../pendingRewards'
 
@@ -132,5 +138,72 @@ describe('wallet client', () => {
       confirmedBalance: 50,
       remaining: 0,
     })
+  })
+
+  it('starts and cancels an idempotent focus reward source', async () => {
+    client.rpc
+      .mockResolvedValueOnce({ data: 'focus-source', error: null })
+      .mockResolvedValueOnce({ data: 'focus-source', error: null })
+
+    await expect(startFocusRewardSession('focus-source', 30)).resolves.toBeUndefined()
+    await expect(cancelFocusRewardSession('focus-source')).resolves.toBeUndefined()
+
+    expect(client.rpc).toHaveBeenNthCalledWith(1, 'start_focus_reward_session', {
+      p_source_id: 'focus-source',
+      p_duration_minutes: 30,
+    })
+    expect(client.rpc).toHaveBeenNthCalledWith(2, 'cancel_focus_reward_session', {
+      p_source_id: 'focus-source',
+    })
+  })
+
+  it('records local verification before issuing a challenge', async () => {
+    client.rpc
+      .mockResolvedValueOnce({ data: 'attempt-1', error: null })
+      .mockResolvedValueOnce({
+        data: [{ nonce: 'challenge-1', expires_at: '2026-09-25T08:10:00.000Z', replayed: false }],
+        error: null,
+      })
+
+    await recordLocalVerificationAttempt('attempt-1', 'chore', 'chore_sweep')
+    await expect(issueRewardChallenge('chore', 'attempt-1')).resolves.toEqual({
+      nonce: 'challenge-1',
+      expiresAt: '2026-09-25T08:10:00.000Z',
+      replayed: false,
+    })
+  })
+
+  it('creates a stable queued shape for the authenticated challenge owner', async () => {
+    await expect(
+      createPendingReward({
+        requestId: 'request-1',
+        rewardType: 'focus',
+        challengeNonce: 'challenge-1',
+        sourceDate: '2026-09-25',
+        createdAt: '2026-09-25T08:00:00.000Z',
+      })
+    ).resolves.toEqual({
+      requestId: 'request-1',
+      studentId: 'student-a',
+      rewardType: 'focus',
+      sourceId: 'challenge-1',
+      sourceDate: '2026-09-25',
+      createdAt: '2026-09-25T08:00:00.000Z',
+    })
+  })
+
+  it('loads server-owned daily quest assignments', async () => {
+    client.rpc.mockResolvedValue({
+      data: [
+        { reward_type: 'chore', quest_id: 'chore_sweep', source_date: '2026-09-25', position: 1 },
+        { reward_type: 'outdoor', quest_id: 'outdoor_walk', source_date: '2026-09-25', position: 1 },
+      ],
+      error: null,
+    })
+
+    await expect(ensureDailyQuestAssignments()).resolves.toEqual([
+      { rewardType: 'chore', questId: 'chore_sweep', sourceDate: '2026-09-25', position: 1 },
+      { rewardType: 'outdoor', questId: 'outdoor_walk', sourceDate: '2026-09-25', position: 1 },
+    ])
   })
 })

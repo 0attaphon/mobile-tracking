@@ -20,8 +20,17 @@ const CATEGORY_TABS: { key: ItemCategory; label: string; emoji: string }[] = [
 
 export default function ShopScreen() {
   const { activeCategory, setActiveCategory } = useShopStore()
-  const { coins, spendCoins, equipItem, equippedItems, setActivePet, activePetId } = usePetStore()
-  const { ownedItems, addOwnedItem, _hasHydrated: userHydrated } = useUserStore()
+  const {
+    coins,
+    confirmedCoins,
+    pendingRewardCoins,
+    walletMigrationState,
+    equipItem,
+    equippedItems,
+    setActivePet,
+    activePetId,
+  } = usePetStore()
+  const { ownedItems, _hasHydrated: userHydrated } = useUserStore()
   const petHydrated = usePetStore((s) => s._hasHydrated)
   const storageReady = userHydrated && petHydrated
   const { setBackground, toggleDecoration, selectedBgId, placedDecorations } = useRoomStore()
@@ -82,34 +91,15 @@ export default function ShopScreen() {
       return
     }
 
-    if (coins < price) {
-      Alert.alert('⭐ เหรียญไม่พอ', `ต้องการ ${price} ⭐ (มี ${coins} ⭐)`)
+    if (walletMigrationState !== 'ready') {
+      Alert.alert('กำลังเตรียมกระเป๋าเหรียญ', 'รอให้ตรวจสอบยอดเดิมเสร็จก่อนซื้อสินค้า')
       return
     }
-
-    const success = spendCoins(price)
-    if (!success) {
-      Alert.alert('⭐ เหรียญไม่พอ', 'ทำ Focus session เพื่อหาเหรียญเพิ่มนะ!')
-      setSelectedItem(null)
+    if (confirmedCoins < price) {
+      Alert.alert('⭐ เหรียญไม่พอ', `ต้องการ ${price} ⭐ (ใช้ได้ ${confirmedCoins} ⭐)`)
       return
     }
-
-    addOwnedItem(id)
-    if (selectedItem.petId) {
-      addOwnedItem(selectedItem.petId)
-    }
-
-    if (selectedItem.category === 'pet' && selectedItem.petId) {
-      setActivePet(selectedItem.petId)
-      Alert.alert('สำเร็จ!', `ได้ ${selectedItem.name} แล้ว 🎉`)
-    } else if (selectedItem.category === 'background') {
-      setBackground(selectedItem)
-    } else if (selectedItem.category === 'room') {
-      toggleDecoration(id)
-    } else if (selectedItem.category === 'outfit') {
-      equipItem(id)
-    }
-    setSelectedItem(null)
+    Alert.alert('ยังซื้อไม่ได้', 'ระบบกำลังเชื่อมการซื้อกับกระเป๋าเหรียญบนเซิร์ฟเวอร์')
   }
 
   return (
@@ -118,9 +108,17 @@ export default function ShopScreen() {
         {/* Header */}
         <View className="flex-row items-center justify-between pt-2 pb-3">
           <Text style={{ color: text }} className="text-2xl font-bold">ร้านค้า 🛍️</Text>
-          <View style={{ backgroundColor: surface }} className="flex-row items-center gap-1 px-3 py-1.5 rounded-full">
-            <EmojiIcon name="star" size={16} />
-            <Text className="text-yellow font-bold text-sm">{coins}</Text>
+          <View style={{ backgroundColor: surface }} className="items-end px-3 py-1.5 rounded-full">
+            <View className="flex-row items-center gap-1">
+              <EmojiIcon name="star" size={16} />
+              <Text className="text-yellow font-bold text-sm">{coins}</Text>
+            </View>
+            {pendingRewardCoins > 0 && (
+              <Text className="text-text-secondary text-[9px]">+{pendingRewardCoins} รอยืนยัน</Text>
+            )}
+            {walletMigrationState === 'legacy_pending' && (
+              <Text className="text-orange-300 text-[9px]">กำลังย้ายยอดเดิม</Text>
+            )}
           </View>
         </View>
 
@@ -188,8 +186,8 @@ export default function ShopScreen() {
                   </TouchableOpacity>
                   <TouchableOpacity
                     onPress={handleBuy}
-                    disabled={!storageReady || coins < (selectedItem?.price ?? 0)}
-                    className={`flex-1 py-3 rounded-xl items-center ${!storageReady || coins < (selectedItem?.price ?? 0)
+                    disabled={!storageReady || confirmedCoins < (selectedItem?.price ?? 0)}
+                    className={`flex-1 py-3 rounded-xl items-center ${!storageReady || confirmedCoins < (selectedItem?.price ?? 0)
                         ? 'bg-primary/40'
                         : 'bg-primary-light'
                       }`}
@@ -197,8 +195,8 @@ export default function ShopScreen() {
                     <Text className="text-white font-bold">
                       {!storageReady
                         ? 'กำลังโหลด...'
-                        : coins < (selectedItem?.price ?? 0)
-                          ? `เหรียญไม่พอ (${coins}/${selectedItem?.price})`
+                        : confirmedCoins < (selectedItem?.price ?? 0)
+                          ? `เหรียญไม่พอ (${confirmedCoins}/${selectedItem?.price})`
                           : `ซื้อ ${selectedItem.price} ⭐`}
                     </Text>
                   </TouchableOpacity>

@@ -2,12 +2,13 @@ import React, { useEffect } from 'react'
 import { View, Image, StyleSheet } from 'react-native'
 import { useRouter, useSegments, useRootNavigationState } from 'expo-router'
 import * as SplashScreen from 'expo-splash-screen'
+import * as Network from 'expo-network'
 import { APP_LOADING } from '@/assets/appImages'
 import { useIdentityStore } from '@/stores/identityStore'
 import { useUserStore } from '@/stores/userStore'
 import { usePetStore } from '@/stores/petStore'
 import { restoreRegisteredStudent } from '@/services/supabase/register'
-import { flushSyncQueue } from '@/services/supabase/sync'
+import { syncWalletAfterAuthentication } from '@/services/supabase/walletSync'
 import { isSupabaseConfigured } from '@/services/supabase/client'
 
 SplashScreen.preventAutoHideAsync().catch(() => {})
@@ -49,7 +50,13 @@ export function IdentityGate({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     if (!hasHydrated || !isRegistered) return
-    flushSyncQueue().catch(() => {})
+    syncWalletAfterAuthentication().catch(() => {})
+    const subscription = Network.addNetworkStateListener((state) => {
+      if (state.isConnected && state.isInternetReachable !== false) {
+        syncWalletAfterAuthentication().catch(() => {})
+      }
+    })
+    return () => subscription.remove()
   }, [hasHydrated, isRegistered])
 
   useEffect(() => {

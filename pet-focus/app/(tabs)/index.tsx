@@ -20,6 +20,8 @@ export default function HomeScreen() {
   const setPetName = usePetStore((s) => s.setPetName)
   const activePetId = usePetStore((s) => s.activePetId)
   const equippedItems = usePetStore((s) => s.equippedItems)
+  const pendingRewardCoins = usePetStore((s) => s.pendingRewardCoins)
+  const walletMigrationState = usePetStore((s) => s.walletMigrationState)
   const { placedDecorations } = useRoomStore()
   const { isLight, text: textColor, textSecondary } = useAppTheme()
   const mood = getPetMood(happiness)
@@ -38,9 +40,19 @@ export default function HomeScreen() {
           <View style={{ backgroundColor: surfaceColor }} className="px-3 py-1.5 rounded-full">
             <Text style={{ color: textColor }} className="text-xs font-bold">Lv.{level}</Text>
           </View>
-          <View style={{ backgroundColor: surfaceColor }} className="flex-row items-center gap-1 px-3 py-1.5 rounded-full">
-            <EmojiIcon name="star" size={14} />
-            <Text style={{ color: '#FFD600' }} className="font-bold text-xs">{coins}</Text>
+          <View style={{ backgroundColor: surfaceColor }} className="items-end px-3 py-1.5 rounded-full">
+            <View className="flex-row items-center gap-1">
+              <EmojiIcon name="star" size={14} />
+              <Text style={{ color: '#FFD600' }} className="font-bold text-xs">{coins}</Text>
+            </View>
+            {pendingRewardCoins > 0 && (
+              <Text style={{ color: textSecondary }} className="text-[9px]">
+                +{pendingRewardCoins} รอยืนยัน
+              </Text>
+            )}
+            {walletMigrationState === 'legacy_pending' && (
+              <Text style={{ color: '#FFB74D' }} className="text-[9px]">กำลังย้ายยอดเดิม</Text>
+            )}
           </View>
         </View>
 
@@ -89,4 +101,3 @@ function StatRow({ emoji, value, color, trackColor, textColor }: {
     </View>
   )
 }
-

@@ -1,44 +1,12 @@
 import { create } from 'zustand'
 import { persist, createJSONStorage } from 'zustand/middleware'
 import AsyncStorage from '@react-native-async-storage/async-storage'
+import * as Crypto from 'expo-crypto'
 import { CHORE_QUESTS, ChoreQuest } from '@/types/focus'
 import { todayKey } from '@/utils/imageTensor'
 import { usePetStore } from '@/stores/petStore'
-import { useUserStore } from '@/stores/userStore'
-import { syncChoreCompletion } from '@/services/supabase/sync'
-
-const MIN_DAILY_QUESTS = 3
-const MAX_DAILY_QUESTS = 5
-
-function stringToSeed(str: string): number {
-  let h = 0
-  for (let i = 0; i < str.length; i++) {
-    h = (Math.imul(31, h) + str.charCodeAt(i)) | 0
-  }
-  return h
-}
-
-function mulberry32(seed: number) {
-  let a = seed
-  return () => {
-    a = (a + 0x6d2b79f5) | 0
-    let t = Math.imul(a ^ (a >>> 15), 1 | a)
-    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t
-    return ((t ^ (t >>> 14)) >>> 0) / 4294967296
-  }
-}
-
-// Seeded by studentId+date so the picked quests stay stable across app restarts within the same day.
-function pickDailyQuestIds(dateKey: string, studentId: string): string[] {
-  const rng = mulberry32(stringToSeed(`${studentId}:${dateKey}`))
-  const ids = CHORE_QUESTS.map((q) => q.id)
-  for (let i = ids.length - 1; i > 0; i--) {
-    const j = Math.floor(rng() * (i + 1))
-    ;[ids[i], ids[j]] = [ids[j], ids[i]]
-  }
-  const count = MIN_DAILY_QUESTS + Math.floor(rng() * (MAX_DAILY_QUESTS - MIN_DAILY_QUESTS + 1))
-  return ids.slice(0, count)
-}
+import { ensureDailyQuestAssignments } from '@/services/supabase/wallet'
+import type { PendingReward } from '@/services/supabase/pendingRewards'
 
 export interface ChoreQuestProgress {
   questId: string
@@ -55,10 +23,14 @@ interface ChoreQuestState {
   recentHashes: Record<string, string[]>
   todayQuestIds: string[]
   todayQuestsDate: string
+  assignmentStatus: 'idle' | 'loading' | 'ready' | 'error'
+  verificationAttemptIds: Record<string, string>
   ensureToday: () => void
+  refreshTodayAssignments: () => Promise<void>
   getQuestProgress: (questId: string) => ChoreQuestProgress
+  getOrCreateVerificationAttemptId: (questId: string) => string
   recordAttempt: (questId: string, matched: boolean, reason?: string) => void
-  completeQuest: (quest: ChoreQuest) => boolean
+  completeQuest: (quest: ChoreQuest, reward: PendingReward) => Promise<boolean>
   isDuplicateHash: (questId: string, hash: string) => boolean
   recordHash: (questId: string, hash: string) => void
 }
@@ -74,24 +46,49 @@ export const useChoreQuestStore = create<ChoreQuestState>()(
       recentHashes: {},
       todayQuestIds: [],
       todayQuestsDate: '',
+      assignmentStatus: 'idle',
+      verificationAttemptIds: {},
 
       ensureToday: () => {
         const today = todayKey()
         if (get().todayQuestsDate === today) return
-        set((state) => {
-          const studentId = useUserStore.getState().studentId ?? 'anon'
-          const questIds = pickDailyQuestIds(today, studentId)
-          return {
+        set({
+          todayQuestIds: [],
+          todayQuestsDate: today,
+          assignmentStatus: 'idle',
+        })
+      },
+
+      refreshTodayAssignments: async () => {
+        get().ensureToday()
+        const today = todayKey()
+        set({ assignmentStatus: 'loading' })
+        try {
+          const assignments = await ensureDailyQuestAssignments()
+          const knownQuestIds = new Set(CHORE_QUESTS.map((quest) => quest.id))
+          const questIds = assignments
+            .filter(
+              (assignment) =>
+                assignment.rewardType === 'chore' &&
+                assignment.sourceDate === today &&
+                knownQuestIds.has(assignment.questId)
+            )
+            .map((assignment) => assignment.questId)
+          set((state) => ({
             todayQuestIds: questIds,
             todayQuestsDate: today,
+            assignmentStatus: 'ready',
             progress: questIds.map((questId) => {
               const existing = state.progress.find(
-                (p) => p.questId === questId && p.date === today
+                (entry) => entry.questId === questId && entry.date === today
               )
               return existing ?? defaultProgress(questId)
             }),
-          }
-        })
+          }))
+        } catch (error) {
+          set({ assignmentStatus: 'error' })
+          throw error
+        }
       },
 
       getQuestProgress: (questId) => {
@@ -100,6 +97,20 @@ export const useChoreQuestStore = create<ChoreQuestState>()(
           get().progress.find((p) => p.questId === questId && p.date === today) ??
           defaultProgress(questId)
         )
+      },
+
+      getOrCreateVerificationAttemptId: (questId) => {
+        const key = `${todayKey()}:${questId}`
+        const existing = get().verificationAttemptIds[key]
+        if (existing) return existing
+        const attemptId = Crypto.randomUUID()
+        set((state) => ({
+          verificationAttemptIds: {
+            ...state.verificationAttemptIds,
+            [key]: attemptId,
+          },
+        }))
+        return attemptId
       },
 
       recordAttempt: (questId, matched, reason) => {
@@ -118,25 +129,34 @@ export const useChoreQuestStore = create<ChoreQuestState>()(
         }))
       },
 
-      completeQuest: (quest) => {
+      completeQuest: async (quest, reward) => {
         const entry = get().getQuestProgress(quest.id)
         if (entry.completedAt) return false
 
         get().ensureToday()
         const today = todayKey()
+        if (
+          get().assignmentStatus !== 'ready' ||
+          !get().todayQuestIds.includes(quest.id) ||
+          reward.rewardType !== 'chore' ||
+          reward.sourceDate !== today
+        ) {
+          return false
+        }
+
+        await usePetStore.getState().queueReward(reward, quest.reward.coins)
         set((state) => ({
           progress: state.progress.map((p) =>
             p.questId === quest.id && p.date === today
               ? { ...p, completedAt: new Date().toISOString(), lastResult: { matched: true } }
               : p
           ),
+          verificationAttemptIds: Object.fromEntries(
+            Object.entries(state.verificationAttemptIds).filter(
+              ([key]) => key !== `${today}:${quest.id}`
+            )
+          ),
         }))
-
-        usePetStore.getState().addCoins(quest.reward.coins)
-        syncChoreCompletion({
-          questId: quest.id,
-          coinsEarned: quest.reward.coins,
-        }).catch(() => {})
         return true
       },
 
