@@ -5,6 +5,11 @@ const client = vi.hoisted(() => ({
   configured: true,
   rpc: vi.fn(),
   getSession: vi.fn(),
+  from: vi.fn(),
+}))
+const walletState = vi.hoisted(() => ({
+  hydrateCoins: vi.fn(),
+  hydrateOwnedItems: vi.fn(),
 }))
 
 vi.mock('@react-native-async-storage/async-storage', () => ({
@@ -23,7 +28,16 @@ vi.mock('../client', () => ({
   supabase: {
     rpc: client.rpc,
     auth: { getSession: client.getSession },
+    from: client.from,
   },
+}))
+
+vi.mock('@/stores/petStore', () => ({
+  usePetStore: { getState: () => ({ hydrateCoins: walletState.hydrateCoins }) },
+}))
+
+vi.mock('@/stores/userStore', () => ({
+  useUserStore: { getState: () => ({ hydrateOwnedItems: walletState.hydrateOwnedItems }) },
 }))
 
 import {
@@ -36,7 +50,9 @@ import {
   fetchWallet,
   flushPendingRewards,
   issueRewardChallenge,
+  purchaseItem,
   recordLocalVerificationAttempt,
+  refreshWalletAndInventory,
   startFocusRewardSession,
 } from '../wallet'
 import type { PendingReward } from '../pendingRewards'
@@ -55,6 +71,9 @@ beforeEach(() => {
   client.configured = true
   client.rpc.mockReset()
   client.getSession.mockReset()
+  client.from.mockReset()
+  walletState.hydrateCoins.mockReset()
+  walletState.hydrateOwnedItems.mockReset()
   client.getSession.mockResolvedValue({
     data: { session: { user: { id: 'student-a' } } },
   })
@@ -205,5 +224,89 @@ describe('wallet client', () => {
       { rewardType: 'chore', questId: 'chore_sweep', sourceDate: '2026-09-25', position: 1 },
       { rewardType: 'outdoor', questId: 'outdoor_walk', sourceDate: '2026-09-25', position: 1 },
     ])
+  })
+
+  it('refreshes confirmed balance and authoritative inventory together', async () => {
+    client.rpc.mockResolvedValue({ data: [{ balance: 70 }], error: null })
+    client.from.mockReturnValue({
+      select: vi.fn().mockResolvedValue({
+        data: [{ item_id: 'hat_straw' }, { item_id: 'bg_sky' }],
+        error: null,
+      }),
+    })
+
+    await refreshWalletAndInventory()
+
+    expect(walletState.hydrateCoins).toHaveBeenCalledWith(70)
+    expect(walletState.hydrateOwnedItems).toHaveBeenCalledWith(['hat_straw', 'bg_sky'])
+  })
+
+  it('hydrates wallet and inventory after a successful purchase', async () => {
+    client.rpc
+      .mockResolvedValueOnce({
+        data: [{ balance: 40, ledger_id: 'ledger-1', replayed: false }],
+        error: null,
+      })
+      .mockResolvedValueOnce({ data: [{ balance: 40 }], error: null })
+    client.from.mockReturnValue({
+      select: vi.fn().mockResolvedValue({ data: [{ item_id: 'hat_straw' }], error: null }),
+    })
+
+    await purchaseItem('hat_straw', 1, 'request-1')
+
+    expect(client.rpc).toHaveBeenNthCalledWith(1, 'purchase_shop_item', {
+      p_item_id: 'hat_straw',
+      p_catalog_version: 1,
+      p_request_id: 'request-1',
+    })
+    expect(walletState.hydrateCoins).toHaveBeenCalledWith(40)
+    expect(walletState.hydrateOwnedItems).toHaveBeenCalledWith(['hat_straw'])
+  })
+
+  it('preserves local ownership when the server rejects insufficient coins', async () => {
+    client.rpc.mockResolvedValue({ data: null, error: { message: 'INSUFFICIENT_COINS' } })
+
+    await expect(purchaseItem('hat_straw', 1, 'request-1')).rejects.toMatchObject({
+      code: 'INSUFFICIENT_COINS',
+    })
+    expect(walletState.hydrateCoins).not.toHaveBeenCalled()
+    expect(walletState.hydrateOwnedItems).not.toHaveBeenCalled()
+  })
+
+  it('hydrates one authoritative item when a purchase request is replayed', async () => {
+    client.rpc
+      .mockResolvedValueOnce({
+        data: [{ balance: 40, ledger_id: 'ledger-1', replayed: true }],
+        error: null,
+      })
+      .mockResolvedValueOnce({ data: [{ balance: 40 }], error: null })
+    client.from.mockReturnValue({
+      select: vi.fn().mockResolvedValue({ data: [{ item_id: 'hat_straw' }], error: null }),
+    })
+
+    await purchaseItem('hat_straw', 1, 'request-1')
+
+    expect(walletState.hydrateOwnedItems).toHaveBeenCalledWith(['hat_straw'])
+  })
+
+  it('uses the caller request id unchanged when retrying a timeout', async () => {
+    client.rpc.mockRejectedValue(new Error('Failed to fetch'))
+
+    await expect(purchaseItem('hat_straw', 1, 'request-stable')).rejects.toMatchObject({
+      code: 'OFFLINE',
+    })
+    await expect(purchaseItem('hat_straw', 1, 'request-stable')).rejects.toMatchObject({
+      code: 'OFFLINE',
+    })
+    expect(client.rpc).toHaveBeenNthCalledWith(1, 'purchase_shop_item', {
+      p_item_id: 'hat_straw',
+      p_catalog_version: 1,
+      p_request_id: 'request-stable',
+    })
+    expect(client.rpc).toHaveBeenNthCalledWith(2, 'purchase_shop_item', {
+      p_item_id: 'hat_straw',
+      p_catalog_version: 1,
+      p_request_id: 'request-stable',
+    })
   })
 })

@@ -27,6 +27,7 @@ interface UserState {
   setLoading: (value: boolean) => void
   setHasHydrated: (value: boolean) => void
   addOwnedItem: (itemId: string) => void
+  hydrateOwnedItems: (itemIds: string[]) => void
   earnAchievement: (achievementId: string) => void
   logout: () => void
 }
@@ -58,6 +59,8 @@ export const useUserStore = create<UserState>()(
             ? state.ownedItems
             : [...state.ownedItems, itemId],
         })),
+
+      hydrateOwnedItems: (ownedItems) => set({ ownedItems: [...new Set(ownedItems)] }),
 
       earnAchievement: (achievementId) =>
         set((state) => ({

@@ -8,8 +8,8 @@
 
 ### Task 3.1: Purchase/Inventory Client
 
-- [ ] Write failing RPC-mock tests: success hydrates balance/inventory; insufficient coins preserve ownership; replay owns one item; timeout retains request ID.
-- [ ] Implement:
+- [x] Write failing RPC-mock tests: success hydrates balance/inventory; insufficient coins preserve ownership; replay owns one item; timeout retains request ID.
+- [x] Implement:
 
 ```ts
 refreshWalletAndInventory(): Promise<void>
@@ -20,7 +20,7 @@ purchaseItem(
 ): Promise<void>
 ```
 
-- [ ] Treat only server-returned confirmed balance and inventory as authoritative.
+- [x] Treat only server-returned confirmed balance and inventory as authoritative.
 - [ ] Run focused tests and commit: `feat: add transactional purchase client`.
 
 ### Task 3.2: One-Time Legacy Import

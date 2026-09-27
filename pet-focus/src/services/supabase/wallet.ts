@@ -5,6 +5,8 @@ import {
   listPendingRewards,
   type PendingReward,
 } from './pendingRewards'
+import { usePetStore } from '@/stores/petStore'
+import { useUserStore } from '@/stores/userStore'
 
 export type WalletErrorCode =
   | 'ADMIN_REQUIRED'
@@ -266,6 +268,54 @@ export async function flushPendingRewards(studentId: string): Promise<{
 
   const wallet = await fetchWallet()
   return { confirmedBalance: wallet.confirmedBalance, remaining: result.remaining }
+}
+
+export async function refreshWalletAndInventory(): Promise<void> {
+  requireConfigured()
+  try {
+    const [wallet, inventoryResult] = await Promise.all([
+      fetchWallet(),
+      supabase.from('student_inventory').select('item_id'),
+    ])
+    if (inventoryResult.error) throw inventoryResult.error
+    if (!Array.isArray(inventoryResult.data)) {
+      throw new WalletError('UNKNOWN', 'INVALID_INVENTORY_RESPONSE')
+    }
+    const ownedItems = inventoryResult.data.map((value) => {
+      const row = value && typeof value === 'object' ? (value as Record<string, unknown>) : null
+      if (!row || typeof row.item_id !== 'string') {
+        throw new WalletError('UNKNOWN', 'INVALID_INVENTORY_RESPONSE')
+      }
+      return row.item_id
+    })
+
+    usePetStore.getState().hydrateCoins(wallet.confirmedBalance)
+    useUserStore.getState().hydrateOwnedItems(ownedItems)
+  } catch (error) {
+    throw toWalletError(error)
+  }
+}
+
+export async function purchaseItem(
+  itemId: string,
+  catalogVersion: number,
+  requestId: string
+): Promise<void> {
+  const data = await runWalletRpc('purchase_shop_item', {
+    p_item_id: itemId,
+    p_catalog_version: catalogVersion,
+    p_request_id: requestId,
+  })
+  const row = firstRow(data)
+  if (
+    !row ||
+    typeof row.balance !== 'number' ||
+    typeof row.ledger_id !== 'string' ||
+    typeof row.replayed !== 'boolean'
+  ) {
+    throw new WalletError('UNKNOWN', 'INVALID_PURCHASE_RESPONSE')
+  }
+  await refreshWalletAndInventory()
 }
 
 export type { PendingReward } from './pendingRewards'

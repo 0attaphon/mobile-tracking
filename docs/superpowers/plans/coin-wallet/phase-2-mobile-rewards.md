@@ -43,7 +43,7 @@ fetchWallet(): Promise<{
 - [x] Remove new uses of `syncCoinDelta`; do not use `spendCoins` for purchases.
 - [x] Detect the legacy delta queue separately: never guess whether an unanswered delta succeeded and never replay it through the v2 reward path; expose a migration-not-ready state until the documented transition clears it.
 - [x] Flush after authenticated restoration and reconnect; ignore stale responses older than the newest wallet refresh.
-- [x] Run the phase gate and commit: `feat: sync rewards through wallet requests`.
+- [x] Run the phase gate and commit: `feat: sync rewards through wallet requests` (`26fcb84`).
 
 ## Phase Gate
 
