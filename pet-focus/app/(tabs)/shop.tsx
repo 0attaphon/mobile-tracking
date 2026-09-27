@@ -1,5 +1,6 @@
-import React, { useState, useEffect } from 'react'
+import React, { useCallback, useState, useEffect } from 'react'
 import { View, Text, TouchableOpacity, Modal, Alert, Image } from 'react-native'
+import { useFocusEffect } from 'expo-router'
 import { ThemedScreen } from '@/components/ThemedScreen'
 import { useAppTheme } from '@/hooks/useAppTheme'
 import { EmojiIcon } from '@/components/EmojiIcon'
@@ -10,6 +11,7 @@ import { useUserStore } from '@/stores/userStore'
 import { useRoomStore } from '@/stores/roomStore'
 import { SHOP_ITEMS, ShopItem, ItemCategory } from '@/types/shop'
 import { isPetOwned } from '@/types/pet'
+import { usePurchaseStore } from '@/stores/purchaseStore'
 
 const CATEGORY_TABS: { key: ItemCategory; label: string; emoji: string }[] = [
   { key: 'outfit', label: 'แต่งตัว', emoji: '👗' },
@@ -22,7 +24,6 @@ export default function ShopScreen() {
   const { activeCategory, setActiveCategory } = useShopStore()
   const {
     coins,
-    confirmedCoins,
     pendingRewardCoins,
     walletMigrationState,
     equipItem,
@@ -31,6 +32,13 @@ export default function ShopScreen() {
     activePetId,
   } = usePetStore()
   const { ownedItems, _hasHydrated: userHydrated } = useUserStore()
+  const studentId = useUserStore((s) => s.studentId)
+  const inventoryMigrationState = useUserStore((s) => s.inventoryMigrationState)
+  const isSubmitting = usePurchaseStore((s) => s.isSubmitting)
+  const pendingPurchase = usePurchaseStore((s) => s.pendingPurchase)
+  const submitPurchase = usePurchaseStore((s) => s.submitPurchase)
+  const restorePendingPurchase = usePurchaseStore((s) => s.restorePendingPurchase)
+  const refreshShop = usePurchaseStore((s) => s.refreshShop)
   const petHydrated = usePetStore((s) => s._hasHydrated)
   const storageReady = userHydrated && petHydrated
   const { setBackground, toggleDecoration, selectedBgId, placedDecorations } = useRoomStore()
@@ -48,6 +56,16 @@ export default function ShopScreen() {
     }, 1500)
     return () => clearTimeout(fallback)
   }, [])
+
+  useEffect(() => {
+    if (studentId) restorePendingPurchase(studentId).catch(() => {})
+  }, [restorePendingPurchase, studentId])
+
+  useFocusEffect(
+    useCallback(() => {
+      if (studentId && inventoryMigrationState === 'ready') refreshShop().catch(() => {})
+    }, [inventoryMigrationState, refreshShop, studentId])
+  )
 
   const filteredItems = SHOP_ITEMS.filter((i) => i.category === activeCategory)
 
@@ -75,10 +93,10 @@ export default function ShopScreen() {
     }
   }
 
-  function handleBuy() {
-    if (!selectedItem || !storageReady) return
+  async function handleBuy() {
+    if (!selectedItem || !storageReady || !studentId || isSubmitting) return
 
-    const { price, id } = selectedItem
+    const { id } = selectedItem
 
     if (selectedItem.category === 'pet' && selectedItem.petId) {
       if (isPetOwned(selectedItem.petId, ownedItems)) {
@@ -95,11 +113,36 @@ export default function ShopScreen() {
       Alert.alert('กำลังเตรียมกระเป๋าเหรียญ', 'รอให้ตรวจสอบยอดเดิมเสร็จก่อนซื้อสินค้า')
       return
     }
-    if (confirmedCoins < price) {
-      Alert.alert('⭐ เหรียญไม่พอ', `ต้องการ ${price} ⭐ (ใช้ได้ ${confirmedCoins} ⭐)`)
+    const purchased = await submitPurchase(studentId, id, 1)
+    if (!purchased) {
+      const error = usePurchaseStore.getState().lastError
+      if (error === 'INSUFFICIENT_COINS') {
+        Alert.alert('⭐ เหรียญไม่พอ', `ยอดเหรียญที่ยืนยันแล้วไม่พอซื้อ ${selectedItem.name}`)
+      } else if (error === 'OFFLINE') {
+        const retained = usePurchaseStore.getState().pendingPurchase?.itemId === id
+        Alert.alert(
+          'การเชื่อมต่อขาดหาย',
+          retained
+            ? 'คำขอเดิมถูกเก็บไว้แล้ว กดซื้ออีกครั้งเมื่อออนไลน์เพื่อเช็กผลด้วย UUID เดิม'
+            : 'การซื้อต้องเชื่อมต่ออินเทอร์เน็ต'
+        )
+      } else {
+        Alert.alert('ซื้อไม่สำเร็จ', 'ลองใหม่อีกครั้งโดยระบบจะตรวจสอบคำขอเดิมให้')
+      }
       return
     }
-    Alert.alert('ยังซื้อไม่ได้', 'ระบบกำลังเชื่อมการซื้อกับกระเป๋าเหรียญบนเซิร์ฟเวอร์')
+
+    if (selectedItem.category === 'pet' && selectedItem.petId) {
+      setActivePet(selectedItem.petId)
+      Alert.alert('สำเร็จ!', `ได้ ${selectedItem.name} แล้ว 🎉`)
+    } else if (selectedItem.category === 'background') {
+      setBackground(selectedItem)
+    } else if (selectedItem.category === 'room') {
+      toggleDecoration(id)
+    } else if (selectedItem.category === 'outfit') {
+      equipItem(id)
+    }
+    setSelectedItem(null)
   }
 
   return (
@@ -186,8 +229,8 @@ export default function ShopScreen() {
                   </TouchableOpacity>
                   <TouchableOpacity
                     onPress={handleBuy}
-                    disabled={!storageReady || confirmedCoins < (selectedItem?.price ?? 0)}
-                    className={`flex-1 py-3 rounded-xl items-center ${!storageReady || confirmedCoins < (selectedItem?.price ?? 0)
+                    disabled={!storageReady || isSubmitting || walletMigrationState !== 'ready' || inventoryMigrationState !== 'ready'}
+                    className={`flex-1 py-3 rounded-xl items-center ${!storageReady || isSubmitting || walletMigrationState !== 'ready' || inventoryMigrationState !== 'ready'
                         ? 'bg-primary/40'
                         : 'bg-primary-light'
                       }`}
@@ -195,9 +238,13 @@ export default function ShopScreen() {
                     <Text className="text-white font-bold">
                       {!storageReady
                         ? 'กำลังโหลด...'
-                        : confirmedCoins < (selectedItem?.price ?? 0)
-                          ? `เหรียญไม่พอ (${confirmedCoins}/${selectedItem?.price})`
-                          : `ซื้อ ${selectedItem.price} ⭐`}
+                        : walletMigrationState !== 'ready' || inventoryMigrationState !== 'ready'
+                          ? 'กำลังตรวจสอบยอดเดิม...'
+                          : isSubmitting
+                            ? 'กำลังซื้อ...'
+                            : pendingPurchase?.itemId === selectedItem.id
+                              ? 'ลองคำขอเดิมอีกครั้ง'
+                              : `ซื้อ ${selectedItem.price} ⭐`}
                     </Text>
                   </TouchableOpacity>
                 </View>

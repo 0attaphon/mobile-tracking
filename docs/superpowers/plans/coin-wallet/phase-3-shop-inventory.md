@@ -29,15 +29,15 @@ purchaseItem(
 - [x] Persist the migration request ID before calling `import_legacy_inventory`; retry with the same ID.
 - [x] Hydrate ownership from the server and retain equipped IDs only when owned.
 - [x] Verify offline startup still permits already-owned items.
-- [ ] Commit: `feat: migrate legacy shop inventory`.
+- [x] Commit: `feat: migrate legacy shop inventory` (`df3e520`).
 
 ### Task 3.3: Transactional Shop UI
 
-- [ ] Test offline rejection, disabled submission, insufficient balance, timeout retry, and focus refresh.
-- [ ] Require network; persist one UUID before RPC; disable buy while submitting.
-- [ ] On success hydrate wallet/inventory before applying the item. Never decrement locally.
-- [ ] On timeout retain the UUID and offer retry; refresh wallet/inventory whenever shop gains focus.
-- [ ] Commit: `feat: make shop purchases transactional`.
+- [x] Test offline rejection, disabled submission, insufficient balance, timeout retry, and focus refresh.
+- [x] Require network; persist one UUID before RPC; disable buy while submitting.
+- [x] On success hydrate wallet/inventory before applying the item. Never decrement locally.
+- [x] On timeout retain the UUID and offer retry; refresh wallet/inventory whenever shop gains focus.
+- [x] Commit: `feat: make shop purchases transactional`.
 
 ### Task 3.4: Student History
 

@@ -53,9 +53,10 @@ export function IdentityGate({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     if (!hasHydrated || !isRegistered || !studentId) return
     const restoreWallet = async () => {
-      await syncWalletAfterAuthentication()
       const localOwnedItems = useUserStore.getState().ownedItems
+      await syncWalletAfterAuthentication()
       await migrateLegacyInventory(studentId, localOwnedItems)
+      useUserStore.getState().setInventoryMigrationState('ready')
     }
     restoreWallet().catch(() => {})
     const subscription = Network.addNetworkStateListener((state) => {

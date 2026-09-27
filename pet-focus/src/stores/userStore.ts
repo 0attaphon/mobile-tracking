@@ -19,6 +19,7 @@ interface UserState {
   isLoading: boolean
   ownedItems: string[]
   earnedAchievements: string[]
+  inventoryMigrationState: 'checking' | 'ready'
   _hasHydrated: boolean
   setProfile: (profile: UserProfile) => void
   setRegistered: (studentId: string) => void
@@ -28,6 +29,7 @@ interface UserState {
   setHasHydrated: (value: boolean) => void
   addOwnedItem: (itemId: string) => void
   hydrateOwnedItems: (itemIds: string[]) => void
+  setInventoryMigrationState: (state: 'checking' | 'ready') => void
   earnAchievement: (achievementId: string) => void
   logout: () => void
 }
@@ -43,6 +45,7 @@ export const useUserStore = create<UserState>()(
       isLoading: false,
       ownedItems: [],
       earnedAchievements: [],
+      inventoryMigrationState: 'checking',
       _hasHydrated: false,
 
       setProfile: (profile) => set({ profile }),
@@ -61,6 +64,7 @@ export const useUserStore = create<UserState>()(
         })),
 
       hydrateOwnedItems: (ownedItems) => set({ ownedItems: [...new Set(ownedItems)] }),
+      setInventoryMigrationState: (inventoryMigrationState) => set({ inventoryMigrationState }),
 
       earnAchievement: (achievementId) =>
         set((state) => ({
