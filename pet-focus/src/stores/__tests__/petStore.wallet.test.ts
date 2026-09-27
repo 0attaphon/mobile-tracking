@@ -125,4 +125,20 @@ describe('pet wallet state', () => {
       coins: 15,
     })
   })
+
+  it('removes equipped items and a paid pet that are not server-owned', () => {
+    usePetStore.setState({
+      activePetId: 'pet_dog',
+      species: 'dog',
+      equippedItems: ['hat_straw', 'unknown-old-item'],
+    })
+
+    usePetStore.getState().retainOwnedSelections(['hat_straw'])
+
+    expect(usePetStore.getState()).toMatchObject({
+      activePetId: 'pet_cat',
+      species: 'cat',
+      equippedItems: ['hat_straw'],
+    })
+  })
 })

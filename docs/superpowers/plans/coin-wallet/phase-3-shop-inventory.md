@@ -21,14 +21,14 @@ purchaseItem(
 ```
 
 - [x] Treat only server-returned confirmed balance and inventory as authoritative.
-- [ ] Run focused tests and commit: `feat: add transactional purchase client`.
+- [x] Run focused tests and commit: `feat: add transactional purchase client` (`481f126`).
 
 ### Task 3.2: One-Time Legacy Import
 
-- [ ] Test stable per-student migration ID, repeated boot, unknown IDs, and invalid equipped IDs.
-- [ ] Persist the migration request ID before calling `import_legacy_inventory`; retry with the same ID.
-- [ ] Hydrate ownership from the server and retain equipped IDs only when owned.
-- [ ] Verify offline startup still permits already-owned items.
+- [x] Test stable per-student migration ID, repeated boot, unknown IDs, and invalid equipped IDs.
+- [x] Persist the migration request ID before calling `import_legacy_inventory`; retry with the same ID.
+- [x] Hydrate ownership from the server and retain equipped IDs only when owned.
+- [x] Verify offline startup still permits already-owned items.
 - [ ] Commit: `feat: migrate legacy shop inventory`.
 
 ### Task 3.3: Transactional Shop UI

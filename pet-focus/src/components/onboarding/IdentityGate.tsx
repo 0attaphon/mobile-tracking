@@ -9,6 +9,7 @@ import { useUserStore } from '@/stores/userStore'
 import { usePetStore } from '@/stores/petStore'
 import { restoreRegisteredStudent } from '@/services/supabase/register'
 import { syncWalletAfterAuthentication } from '@/services/supabase/walletSync'
+import { migrateLegacyInventory } from '@/services/supabase/legacyInventory'
 import { isSupabaseConfigured } from '@/services/supabase/client'
 
 SplashScreen.preventAutoHideAsync().catch(() => {})
@@ -19,6 +20,7 @@ export function IdentityGate({ children }: { children: React.ReactNode }) {
   const navigationState = useRootNavigationState()
   const identityHydrated = useIdentityStore((s) => s._hasHydrated)
   const isRegistered = useUserStore((s) => s.isRegistered)
+  const studentId = useUserStore((s) => s.studentId)
   const userHydrated = useUserStore((s) => s._hasHydrated)
   const setRegistered = useUserStore((s) => s.setRegistered)
 
@@ -49,15 +51,20 @@ export function IdentityGate({ children }: { children: React.ReactNode }) {
   }, [hasHydrated, setRegistered])
 
   useEffect(() => {
-    if (!hasHydrated || !isRegistered) return
-    syncWalletAfterAuthentication().catch(() => {})
+    if (!hasHydrated || !isRegistered || !studentId) return
+    const restoreWallet = async () => {
+      await syncWalletAfterAuthentication()
+      const localOwnedItems = useUserStore.getState().ownedItems
+      await migrateLegacyInventory(studentId, localOwnedItems)
+    }
+    restoreWallet().catch(() => {})
     const subscription = Network.addNetworkStateListener((state) => {
       if (state.isConnected && state.isInternetReachable !== false) {
-        syncWalletAfterAuthentication().catch(() => {})
+        restoreWallet().catch(() => {})
       }
     })
     return () => subscription.remove()
-  }, [hasHydrated, isRegistered])
+  }, [hasHydrated, isRegistered, studentId])
 
   useEffect(() => {
     if (!hasHydrated || !navigationReady) return

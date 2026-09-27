@@ -318,4 +318,24 @@ export async function purchaseItem(
   await refreshWalletAndInventory()
 }
 
+export async function importLegacyInventory(
+  itemIds: string[],
+  requestId: string
+): Promise<void> {
+  const data = await runWalletRpc('import_legacy_inventory', {
+    p_item_ids: itemIds,
+    p_request_id: requestId,
+  })
+  const row = firstRow(data)
+  if (
+    !row ||
+    typeof row.balance !== 'number' ||
+    typeof row.ledger_id !== 'string' ||
+    typeof row.replayed !== 'boolean'
+  ) {
+    throw new WalletError('UNKNOWN', 'INVALID_LEGACY_IMPORT_RESPONSE')
+  }
+  await refreshWalletAndInventory()
+}
+
 export type { PendingReward } from './pendingRewards'

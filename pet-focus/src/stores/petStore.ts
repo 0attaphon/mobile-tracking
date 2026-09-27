@@ -41,6 +41,7 @@ interface PetState {
   refreshWallet: () => Promise<void>
   flushWalletRewards: (studentId: string) => Promise<void>
   setWalletMigrationState: (state: WalletMigrationState) => void
+  retainOwnedSelections: (ownedItemIds: string[]) => void
   equipItem: (itemId: string) => void
   setPetName: (name: string) => void
   setActivePet: (petId: PetId) => void
@@ -164,6 +165,20 @@ export const usePetStore = create<PetState>()(
       },
 
       setWalletMigrationState: (walletMigrationState) => set({ walletMigrationState }),
+
+      retainOwnedSelections: (ownedItemIds) =>
+        set((state) => {
+          const activePetOwned =
+            state.activePetId === DEFAULT_PET_ID || ownedItemIds.includes(state.activePetId)
+          const activePetId = activePetOwned ? state.activePetId : DEFAULT_PET_ID
+          return {
+            activePetId,
+            species: getPetCatalogEntry(activePetId).species,
+            equippedItems: state.equippedItems.filter((itemId) =>
+              ownedItemIds.includes(itemId)
+            ),
+          }
+        }),
 
       equipItem: (itemId) =>
         set((state) => ({

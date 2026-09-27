@@ -49,6 +49,7 @@ import {
   enqueueReward,
   fetchWallet,
   flushPendingRewards,
+  importLegacyInventory,
   issueRewardChallenge,
   purchaseItem,
   recordLocalVerificationAttempt,
@@ -308,5 +309,26 @@ describe('wallet client', () => {
       p_catalog_version: 1,
       p_request_id: 'request-stable',
     })
+  })
+
+  it('imports legacy inventory idempotently then hydrates the server snapshot', async () => {
+    client.rpc
+      .mockResolvedValueOnce({
+        data: [{ balance: 90, ledger_id: 'ledger-import', replayed: false }],
+        error: null,
+      })
+      .mockResolvedValueOnce({ data: [{ balance: 90 }], error: null })
+    client.from.mockReturnValue({
+      select: vi.fn().mockResolvedValue({ data: [{ item_id: 'hat_straw' }], error: null }),
+    })
+
+    await importLegacyInventory(['hat_straw'], 'migration-request-1')
+
+    expect(client.rpc).toHaveBeenNthCalledWith(1, 'import_legacy_inventory', {
+      p_item_ids: ['hat_straw'],
+      p_request_id: 'migration-request-1',
+    })
+    expect(walletState.hydrateCoins).toHaveBeenCalledWith(90)
+    expect(walletState.hydrateOwnedItems).toHaveBeenCalledWith(['hat_straw'])
   })
 })
