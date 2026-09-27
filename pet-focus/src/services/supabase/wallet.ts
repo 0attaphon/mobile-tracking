@@ -338,4 +338,62 @@ export async function importLegacyInventory(
   await refreshWalletAndInventory()
 }
 
+export type CoinTransactionType =
+  | 'focus_reward'
+  | 'chore_reward'
+  | 'outdoor_reward'
+  | 'shop_purchase'
+  | 'admin_deduction'
+  | 'legacy_import'
+
+export type CoinHistoryEntry = {
+  id: string
+  transactionType: CoinTransactionType
+  delta: number
+  balanceAfter: number
+  createdAt: string
+}
+
+const COIN_TRANSACTION_TYPES = new Set<CoinTransactionType>([
+  'focus_reward',
+  'chore_reward',
+  'outdoor_reward',
+  'shop_purchase',
+  'admin_deduction',
+  'legacy_import',
+])
+
+export async function fetchCoinHistory(): Promise<CoinHistoryEntry[]> {
+  requireConfigured()
+  const { data: sessionData } = await supabase.auth.getSession()
+  if (!sessionData.session?.user.id) {
+    throw new WalletError('UNKNOWN', 'NOT_AUTHENTICATED')
+  }
+  const data = await runWalletRpc('get_my_coin_history', { p_limit: 50 })
+  if (!Array.isArray(data)) {
+    throw new WalletError('UNKNOWN', 'INVALID_COIN_HISTORY_RESPONSE')
+  }
+  return data.map((value) => {
+    const row = value && typeof value === 'object' ? (value as Record<string, unknown>) : null
+    if (
+      !row ||
+      typeof row.id !== 'string' ||
+      typeof row.transaction_type !== 'string' ||
+      !COIN_TRANSACTION_TYPES.has(row.transaction_type as CoinTransactionType) ||
+      typeof row.delta !== 'number' ||
+      typeof row.balance_after !== 'number' ||
+      typeof row.created_at !== 'string'
+    ) {
+      throw new WalletError('UNKNOWN', 'INVALID_COIN_HISTORY_RESPONSE')
+    }
+    return {
+      id: row.id,
+      transactionType: row.transaction_type as CoinTransactionType,
+      delta: row.delta,
+      balanceAfter: row.balance_after,
+      createdAt: row.created_at,
+    }
+  })
+}
+
 export type { PendingReward } from './pendingRewards'

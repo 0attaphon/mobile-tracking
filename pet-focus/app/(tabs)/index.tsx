@@ -1,5 +1,6 @@
 import React from 'react'
-import { View, Text, Dimensions } from 'react-native'
+import { View, Text, Dimensions, TouchableOpacity } from 'react-native'
+import { useRouter } from 'expo-router'
 import { ThemedScreen } from '@/components/ThemedScreen'
 import { EmojiIcon } from '@/components/EmojiIcon'
 import { PetRive } from '@/components/pet/PetRive'
@@ -16,6 +17,7 @@ import { getPetMood } from '@/types/pet'
 const { height } = Dimensions.get('window')
 
 export default function HomeScreen() {
+  const router = useRouter()
   const { name, level, happiness, coins } = usePetStatus()
   const setPetName = usePetStore((s) => s.setPetName)
   const activePetId = usePetStore((s) => s.activePetId)
@@ -40,7 +42,11 @@ export default function HomeScreen() {
           <View style={{ backgroundColor: surfaceColor }} className="px-3 py-1.5 rounded-full">
             <Text style={{ color: textColor }} className="text-xs font-bold">Lv.{level}</Text>
           </View>
-          <View style={{ backgroundColor: surfaceColor }} className="items-end px-3 py-1.5 rounded-full">
+          <TouchableOpacity
+            onPress={() => router.push('/coin-history')}
+            style={{ backgroundColor: surfaceColor }}
+            className="items-end px-3 py-1.5 rounded-full"
+          >
             <View className="flex-row items-center gap-1">
               <EmojiIcon name="star" size={14} />
               <Text style={{ color: '#FFD600' }} className="font-bold text-xs">{coins}</Text>
@@ -53,7 +59,7 @@ export default function HomeScreen() {
             {walletMigrationState === 'legacy_pending' && (
               <Text style={{ color: '#FFB74D' }} className="text-[9px]">กำลังย้ายยอดเดิม</Text>
             )}
-          </View>
+          </TouchableOpacity>
         </View>
 
         {/* Decorations in room */}

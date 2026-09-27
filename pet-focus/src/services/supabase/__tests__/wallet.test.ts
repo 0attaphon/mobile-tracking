@@ -48,6 +48,7 @@ import {
   ensureDailyQuestAssignments,
   enqueueReward,
   fetchWallet,
+  fetchCoinHistory,
   flushPendingRewards,
   importLegacyInventory,
   issueRewardChallenge,
@@ -330,5 +331,52 @@ describe('wallet client', () => {
     })
     expect(walletState.hydrateCoins).toHaveBeenCalledWith(90)
     expect(walletState.hydrateOwnedItems).toHaveBeenCalledWith(['hat_straw'])
+  })
+
+  it('parses only the latest 50 authenticated coin-history entries', async () => {
+    client.rpc.mockResolvedValue({
+      data: [
+        {
+          id: 'ledger-1',
+          transaction_type: 'focus_reward',
+          delta: 15,
+          balance_after: 65,
+          created_at: '2026-09-25T08:00:00.000Z',
+        },
+        {
+          id: 'ledger-2',
+          transaction_type: 'shop_purchase',
+          delta: -30,
+          balance_after: 35,
+          created_at: '2026-09-25T09:00:00.000Z',
+        },
+      ],
+      error: null,
+    })
+
+    await expect(fetchCoinHistory()).resolves.toEqual([
+      {
+        id: 'ledger-1',
+        transactionType: 'focus_reward',
+        delta: 15,
+        balanceAfter: 65,
+        createdAt: '2026-09-25T08:00:00.000Z',
+      },
+      {
+        id: 'ledger-2',
+        transactionType: 'shop_purchase',
+        delta: -30,
+        balanceAfter: 35,
+        createdAt: '2026-09-25T09:00:00.000Z',
+      },
+    ])
+    expect(client.rpc).toHaveBeenCalledWith('get_my_coin_history', { p_limit: 50 })
+  })
+
+  it('does not request coin history without an authenticated student', async () => {
+    client.getSession.mockResolvedValue({ data: { session: null } })
+
+    await expect(fetchCoinHistory()).rejects.toBeInstanceOf(WalletError)
+    expect(client.rpc).not.toHaveBeenCalled()
   })
 })

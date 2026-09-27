@@ -37,14 +37,14 @@ purchaseItem(
 - [x] Require network; persist one UUID before RPC; disable buy while submitting.
 - [x] On success hydrate wallet/inventory before applying the item. Never decrement locally.
 - [x] On timeout retain the UUID and offer retry; refresh wallet/inventory whenever shop gains focus.
-- [x] Commit: `feat: make shop purchases transactional`.
+- [x] Commit: `feat: make shop purchases transactional` (`ea9c0f0`).
 
 ### Task 3.4: Student History
 
-- [ ] Test only the authenticated student's latest 50 entries are parsed.
-- [ ] Render Thai label, signed delta, resulting balance, and local date/time.
-- [ ] Link from the coin badge or settings; never expose another student's data.
-- [ ] Run the phase gate and commit: `feat: show student coin history`.
+- [x] Test only the authenticated student's latest 50 entries are parsed.
+- [x] Render Thai label, signed delta, resulting balance, and local date/time.
+- [x] Link from the coin badge or settings; never expose another student's data.
+- [x] Run the automated phase gate and commit: `feat: show student coin history` (Android smoke pending: no connected device/emulator).
 
 ## Phase Gate
 
