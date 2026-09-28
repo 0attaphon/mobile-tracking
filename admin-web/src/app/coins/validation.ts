@@ -14,6 +14,8 @@ export type CoinActionResult<T> =
 
 export type DeductionResult = { balance: number; ledgerId: string; replayed: boolean }
 
+export const POSTGRES_INT4_MAX = 2_147_483_647
+
 export const COIN_ERROR_MESSAGES: Record<CoinActionErrorCode, string> = {
   ADMIN_REQUIRED: 'บัญชีนี้ไม่มีสิทธิ์ผู้ดูแลระบบ',
   STUDENT_NOT_FOUND: 'ไม่พบนักเรียนที่มีรหัสนี้',
@@ -35,9 +37,13 @@ export async function runAdminAction<TContext extends { isAdmin: boolean }, TRes
   loadContext: () => Promise<TContext>,
   action: (context: TContext) => Promise<CoinActionResult<TResult>>
 ): Promise<CoinActionResult<TResult>> {
-  const context = await loadContext()
-  if (!context.isAdmin) return { ok: false, code: 'ADMIN_REQUIRED', message: COIN_ERROR_MESSAGES.ADMIN_REQUIRED }
-  return action(context)
+  try {
+    const context = await loadContext()
+    if (!context.isAdmin) return { ok: false, code: 'ADMIN_REQUIRED', message: COIN_ERROR_MESSAGES.ADMIN_REQUIRED }
+    return await action(context)
+  } catch {
+    return { ok: false, code: 'UNKNOWN', message: COIN_ERROR_MESSAGES.UNKNOWN }
+  }
 }
 
 export function validateDeduction(input: {
@@ -45,8 +51,14 @@ export function validateDeduction(input: {
   expectedBalance: number
   requestId: string
 }): CoinActionErrorCode | null {
-  if (!Number.isSafeInteger(input.amount) || input.amount <= 0) return 'INVALID_AMOUNT'
-  if (!Number.isSafeInteger(input.expectedBalance) || input.expectedBalance < 0) {
+  if (!Number.isSafeInteger(input.amount) || input.amount <= 0 || input.amount > POSTGRES_INT4_MAX) {
+    return 'INVALID_AMOUNT'
+  }
+  if (
+    !Number.isSafeInteger(input.expectedBalance) ||
+    input.expectedBalance < 0 ||
+    input.expectedBalance > POSTGRES_INT4_MAX
+  ) {
     return 'INVALID_AMOUNT'
   }
   if (input.amount > input.expectedBalance) return 'INSUFFICIENT_COINS'
@@ -64,6 +76,7 @@ export function serverErrorCode(message: string): CoinActionErrorCode {
     'INSUFFICIENT_COINS',
     'BALANCE_CHANGED',
     'IDEMPOTENCY_CONFLICT',
+    'INVALID_AMOUNT',
   ]
   return stableCodes.find((code) => upper.includes(code)) ?? 'UNKNOWN'
 }

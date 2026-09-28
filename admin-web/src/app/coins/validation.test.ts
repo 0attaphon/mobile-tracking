@@ -28,6 +28,14 @@ test('deduction amount rejects zero, negative, decimal, unsafe, and excessive va
   assert.equal(validateDeduction({ amount: 100, expectedBalance: 100, requestId }), null)
 })
 
+test('amount and expected balance stay within PostgreSQL int4 range', () => {
+  const int4Max = 2_147_483_647
+  assert.equal(validateDeduction({ amount: int4Max, expectedBalance: int4Max, requestId }), null)
+  assert.equal(validateDeduction({ amount: int4Max + 1, expectedBalance: int4Max, requestId }), 'INVALID_AMOUNT')
+  assert.equal(validateDeduction({ amount: 1, expectedBalance: int4Max + 1, requestId }), 'INVALID_AMOUNT')
+  assert.equal(serverErrorCode('database rejected INVALID_AMOUNT'), 'INVALID_AMOUNT')
+})
+
 test('stale balance, replay conflict, missing student, and admin errors have Thai messages', () => {
   for (const code of [
     'BALANCE_CHANGED',
@@ -66,6 +74,18 @@ test('admin authorization is checked before the protected query/action', async (
   )
   assert.equal(allowed.ok, false)
   assert.equal(queried, true)
+})
+
+test('rejected admin loading and protected actions return the stable unknown result', async () => {
+  const expected = { ok: false, code: 'UNKNOWN', message: COIN_ERROR_MESSAGES.UNKNOWN }
+  assert.deepEqual(
+    await runAdminAction(async () => { throw new Error('auth/network failure') }, async () => ({ ok: true as const, data: 1 })),
+    expected
+  )
+  assert.deepEqual(
+    await runAdminAction(async () => ({ isAdmin: true }), async () => { throw new Error('supabase failure') }),
+    expected
+  )
 })
 
 test('database replay returns the original ledger result and stale balances map to stable errors', () => {

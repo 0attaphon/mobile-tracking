@@ -21,3 +21,15 @@
 - Exact-match behavior is enforced by `.eq('student_id', normalized)` after trim.
 - Replay semantics depend on the RPC returning the original ledger row with `replayed: true`; the action validates and forwards that response.
 - No live Supabase admin/non-admin session or database smoke test was run. The guard and RPC response behavior are covered with local fixtures; database transaction and role behavior remain dependent on the migration/RPC implementation.
+
+## Follow-up fixes (review findings)
+
+- `runAdminAction` now catches rejected `requireAdmin()` loads and thrown protected Supabase/network work, returning the stable Thai `UNKNOWN` result. Resolved non-admin contexts still return `ADMIN_REQUIRED`; resolved RPC errors continue through stable error-code mapping.
+- Validation now caps both `amount` and `expectedBalance` at PostgreSQL `int4` maximum (`2,147,483,647`) and maps database `INVALID_AMOUNT` to the same stable code.
+- Added focused tests for thrown admin/action calls, `int4` boundary and overflow on both fields, and DB `INVALID_AMOUNT` mapping.
+
+### Follow-up verification
+
+- `cd admin-web && npm test` — passed, 7 tests.
+- `cd admin-web && npx tsc --noEmit` — passed (exit 0, no diagnostics).
+- `cd admin-web && npm run build` — passed (`next build` completed successfully).
