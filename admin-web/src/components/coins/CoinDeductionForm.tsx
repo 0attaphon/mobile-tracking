@@ -3,7 +3,9 @@
 import { useState, type FormEvent } from 'react'
 import {
   deductCoins,
+  getStudentDeductionHistory,
   lookupStudentByCode,
+  type CoinDeductionHistoryItem,
   type StudentCoinSummary,
 } from '@/app/coins/actions'
 import { COIN_ERROR_MESSAGES, POSTGRES_INT4_MAX } from '@/app/coins/validation'
@@ -17,6 +19,7 @@ const RETRYABLE_ERROR = 'เชื่อมต่อไม่สำเร็จ 
 export function CoinDeductionForm() {
   const [studentCode, setStudentCode] = useState('')
   const [student, setStudent] = useState<StudentCoinSummary | null>(null)
+  const [history, setHistory] = useState<CoinDeductionHistoryItem[]>([])
   const [amountText, setAmountText] = useState('')
   const [requestId, setRequestId] = useState<string | null>(null)
   const [lookupError, setLookupError] = useState('')
@@ -36,11 +39,16 @@ export function CoinDeductionForm() {
     setSubmitError('')
     setNotice('')
     setStudent(null)
+    setHistory([])
     setAmountText('')
     setRequestId(null)
     try {
       const result = await lookupStudentByCode(studentCode)
-      if (result.ok) setStudent(result.data)
+      if (result.ok) {
+        setStudent(result.data)
+        const historyResult = await getStudentDeductionHistory(result.data.code)
+        if (historyResult.ok) setHistory(historyResult.data)
+      }
       else setLookupError(result.message)
     } catch {
       setLookupError(RETRYABLE_ERROR)
@@ -52,6 +60,7 @@ export function CoinDeductionForm() {
   function handleStudentCodeChange(value: string) {
     setStudentCode(value)
     setStudent(null)
+    setHistory([])
     setAmountText('')
     setRequestId(null)
     setLookupError('')
@@ -100,7 +109,21 @@ export function CoinDeductionForm() {
         setStudent({ ...student, balance: updatedBalance })
         setAmountText('')
         setRequestId(null)
-        setNotice(`หักเหรียญสำเร็จ ยอดคงเหลือ ${formatCoins(updatedBalance)} เหรียญ`)
+        const confirmedEntry: CoinDeductionHistoryItem = {
+          id: result.data.ledgerId,
+          requestId: activeRequestId,
+          delta: -amount,
+          balanceBefore: student.balance,
+          balanceAfter: updatedBalance,
+          createdAt: new Date().toISOString(),
+        }
+        setHistory((current) => [confirmedEntry, ...current.filter((item) => item.id !== confirmedEntry.id)].slice(0, 10))
+        const historyResult = await getStudentDeductionHistory(student.code)
+        if (historyResult.ok) {
+          // The server ledger is authoritative; replacing it also keeps retries/replays to one row.
+          setHistory(historyResult.data)
+        }
+        setNotice(`${result.data.replayed ? 'รายการนี้ดำเนินการแล้ว' : 'หักเหรียญสำเร็จ'} ยอดคงเหลือ ${formatCoins(updatedBalance)} เหรียญ`)
       } else if (result.code === 'BALANCE_CHANGED') {
         setRequestId(null)
         setAmountText('')
@@ -194,6 +217,25 @@ export function CoinDeductionForm() {
             {busy ? 'กำลังบันทึกรายการ…' : `ยืนยันหัก ${validAmount ? formatCoins(amount) : ''} เหรียญ`}
           </button>
         </form>
+      ) : null}
+
+      {student ? (
+        <section aria-labelledby="coin-history-heading" className="mt-6 border-t border-slate-200 pt-5 dark:border-slate-800">
+          <h2 id="coin-history-heading" className="font-semibold">ประวัติการหักเหรียญล่าสุด</h2>
+          {history.length === 0 ? (
+            <p className="mt-2 text-sm text-slate-500">ยังไม่มีประวัติการหักเหรียญ</p>
+          ) : (
+            <ol className="mt-3 divide-y divide-slate-200 dark:divide-slate-800">
+              {history.map((item) => (
+                <li key={item.id} className="grid gap-1 py-3 text-sm sm:grid-cols-[1fr_auto]">
+                  <span>{new Date(item.createdAt).toLocaleString('th-TH')}</span>
+                  <span className="font-medium">−{formatCoins(Math.abs(item.delta))} เหรียญ</span>
+                  <span className="text-slate-500 sm:col-span-2">{formatCoins(item.balanceBefore)} → {formatCoins(item.balanceAfter)} เหรียญ</span>
+                </li>
+              ))}
+            </ol>
+          )}
+        </section>
       ) : null}
     </section>
   )

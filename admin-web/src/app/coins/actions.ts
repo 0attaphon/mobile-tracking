@@ -21,6 +21,15 @@ export type StudentCoinSummary = {
   balance: number
 }
 
+export type CoinDeductionHistoryItem = {
+  id: string
+  requestId: string
+  delta: number
+  balanceBefore: number
+  balanceAfter: number
+  createdAt: string
+}
+
 export type { DeductionResult } from './validation'
 
 function failure<T>(code: CoinActionErrorCode): CoinActionResult<T> {
@@ -81,6 +90,44 @@ export async function deductCoins(input: {
     return {
       ok: true,
       data: result,
+    }
+  })
+}
+
+export async function getStudentDeductionHistory(
+  studentCode: string
+): Promise<CoinActionResult<CoinDeductionHistoryItem[]>> {
+  return runAdminAction(requireAdmin, async ({ supabase }) => {
+    const normalized = normalizeStudentCode(studentCode)
+    if (!normalized) return failure('INVALID_STUDENT_CODE')
+
+    const { data: student, error: studentError } = await supabase
+      .from('students')
+      .select('id')
+      .eq('student_id', normalized)
+      .maybeSingle()
+    if (studentError) return failure(serverErrorCodeFrom(studentError))
+    if (!student) return failure('STUDENT_NOT_FOUND')
+
+    const { data, error } = await supabase
+      .from('coin_ledger')
+      .select('id, request_id, delta, balance_before, balance_after, created_at')
+      .eq('student_id', student.id)
+      .eq('transaction_type', 'admin_deduction')
+      .order('created_at', { ascending: false })
+      .limit(10)
+    if (error) return failure(serverErrorCodeFrom(error))
+
+    return {
+      ok: true,
+      data: (data ?? []).map((item) => ({
+        id: item.id,
+        requestId: item.request_id,
+        delta: item.delta,
+        balanceBefore: item.balance_before,
+        balanceAfter: item.balance_after,
+        createdAt: item.created_at,
+      })),
     }
   })
 }

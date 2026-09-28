@@ -13,6 +13,9 @@ export function AdminNav() {
       <Link href="/students" className="text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white text-sm">
         นักเรียน
       </Link>
+      <Link href="/coins" className="text-slate-600 hover:text-slate-900 dark:text-slate-300 dark:hover:text-white text-sm">
+        เหรียญ
+      </Link>
       <div className="ml-auto flex items-center gap-4">
         <ThemeToggle />
         <form action="/auth/signout" method="POST">
