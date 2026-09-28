@@ -39,7 +39,7 @@ wallet_transaction_result(balance integer, ledger_id uuid, replayed boolean)
 claim_student_reward(p_request_id uuid, p_reward_type text, p_source_id text, p_source_date date)
 purchase_shop_item(p_item_id text, p_catalog_version integer, p_request_id uuid)
 import_legacy_inventory(p_item_ids text[], p_request_id uuid)
-admin_deduct_student_coins(p_student_code text, p_amount integer, p_request_id uuid, p_expected_balance integer)
+admin_deduct_student_coins_v2(p_student_code text, p_amount integer, p_request_id uuid, p_expected_balance integer, p_expected_wallet_version bigint)
 get_my_wallet()
 get_my_coin_history(p_limit integer)
 ```
@@ -83,6 +83,12 @@ Stable errors: `ADMIN_REQUIRED`, `STUDENT_NOT_FOUND`, `INSUFFICIENT_COINS`, `BAL
 Additive schema/catalog → compatible mobile build → verify legacy import and v2 queues → require compatible build for spending → revoke old delta RPC → enable admin UI.
 
 Rollback hides new UI and stops new mutations; it never deletes ledger, balances, or inventory.
+
+### Phase 4 wallet version contract
+
+The admin lookup returns the exact number of `coin_ledger` rows for the student as `walletVersion`, alongside the confirmed balance. The versioned `admin_deduct_student_coins_v2` RPC locks the student row and requires both expected values to match before deduction. It stores the expected version in ledger metadata so an idempotent retry must match the original student, amount, actor, balance, and version. The legacy four-argument RPC is revoked from `PUBLIC`, `anon`, and `authenticated` because it cannot validate a confirmation version.
+
+Deploy the migration before deploying the matching admin server actions/UI. During that short transition, the previous admin app will fail closed on deductions because its legacy RPC permission is removed; do not roll the application back to code that calls the legacy RPC. Application rollback should hide/disable deductions while retaining the migration and ledger. A database rollback must not re-grant the balance-only RPC; restore the matching application version or keep deductions disabled until the versioned contract is available.
 
 ## Original Plan Mapping
 

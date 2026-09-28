@@ -19,6 +19,7 @@ export type StudentCoinSummary = {
   nickname: string | null
   className: string | null
   balance: number
+  walletVersion: number
 }
 
 export type CoinDeductionHistoryItem = {
@@ -52,6 +53,13 @@ export async function lookupStudentByCode(
     if (error) return failure(serverErrorCodeFrom(error))
     if (!data) return failure('STUDENT_NOT_FOUND')
 
+    const { count, error: versionError } = await supabase
+      .from('coin_ledger')
+      .select('id', { count: 'exact', head: true })
+      .eq('student_id', data.id)
+    if (versionError) return failure(serverErrorCodeFrom(versionError))
+    if (count === null) return failure('UNKNOWN')
+
     return {
       ok: true,
       data: {
@@ -60,6 +68,7 @@ export async function lookupStudentByCode(
         nickname: data.nickname,
         className: data.class_name,
         balance: data.coins,
+        walletVersion: count,
       },
     }
   })
@@ -70,6 +79,7 @@ export async function deductCoins(input: {
   amount: number
   requestId: string
   expectedBalance: number
+  expectedWalletVersion: number
 }): Promise<CoinActionResult<DeductionResult>> {
   return runAdminAction(requireAdmin, async ({ supabase }) => {
     const studentCode = normalizeStudentCode(input.studentCode)
@@ -77,11 +87,12 @@ export async function deductCoins(input: {
     const validationError = validateDeduction(input)
     if (validationError) return failure(validationError)
 
-    const { data, error } = await supabase.rpc('admin_deduct_student_coins', {
+    const { data, error } = await supabase.rpc('admin_deduct_student_coins_v2', {
       p_student_code: studentCode,
       p_amount: input.amount,
       p_request_id: input.requestId,
       p_expected_balance: input.expectedBalance,
+      p_expected_wallet_version: input.expectedWalletVersion,
     })
     if (error) return failure(serverErrorCodeFrom(error))
 

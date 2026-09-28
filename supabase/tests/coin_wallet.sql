@@ -1,6 +1,6 @@
 begin;
 
-select plan(86);
+select plan(93);
 
 select is(
   (select count(*)::integer from public.shop_catalog_items where version = 1),
@@ -66,6 +66,18 @@ select ok(
 select ok(
   not has_function_privilege('authenticated', 'public.increment_student_coins(integer)', 'execute'),
   'authenticated clients cannot execute the legacy coin delta RPC'
+);
+select ok(
+  not has_function_privilege('public', 'public.admin_deduct_student_coins(text,integer,uuid,integer)', 'execute'),
+  'PUBLIC cannot execute the balance-only deduction RPC'
+);
+select ok(
+  not has_function_privilege('authenticated', 'public.admin_deduct_student_coins(text,integer,uuid,integer)', 'execute'),
+  'authenticated clients cannot execute the balance-only deduction RPC'
+);
+select ok(
+  has_function_privilege('authenticated', 'public.admin_deduct_student_coins_v2(text,integer,uuid,integer,bigint)', 'execute'),
+  'authenticated callers can use the versioned deduction RPC'
 );
 
 insert into auth.users (
@@ -143,14 +155,14 @@ select lives_ok(
 -- An absent auth context and a non-admin user must not be able to deduct.
 select set_config('request.jwt.claim.sub', '', true);
 select throws_ok(
-  $$select * from public.admin_deduct_student_coins('STUDENT-ONE', 40, '10000000-0000-0000-0000-000000000001', 100)$$,
+  $$select * from public.admin_deduct_student_coins_v2('STUDENT-ONE', 40, '10000000-0000-0000-0000-000000000001', 100, 0)$$,
   'P0001', 'ADMIN_REQUIRED',
   'unauthenticated deduction requires an admin'
 );
 
 select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-000000000012', true);
 select throws_ok(
-  $$select * from public.admin_deduct_student_coins('STUDENT-ONE', 40, '10000000-0000-0000-0000-000000000002', 100)$$,
+  $$select * from public.admin_deduct_student_coins_v2('STUDENT-ONE', 40, '10000000-0000-0000-0000-000000000002', 100, 0)$$,
   'P0001', 'ADMIN_REQUIRED',
   'student deduction requires an admin'
 );
@@ -160,46 +172,70 @@ values ('00000000-0000-0000-0000-000000000001', 'wallet-admin@example.test', 'wa
 select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-000000000001', true);
 
 select throws_ok(
-  $$select * from public.admin_deduct_student_coins('STUDENT-ONE', 0, '10000000-0000-0000-0000-000000000003', 100)$$,
+  $$select * from public.admin_deduct_student_coins_v2('STUDENT-ONE', 0, '10000000-0000-0000-0000-000000000003', 100, 0)$$,
   'P0001', 'INVALID_AMOUNT',
   'zero deduction is rejected'
 );
 select throws_ok(
-  $$select * from public.admin_deduct_student_coins('STUDENT-ONE', -1, '10000000-0000-0000-0000-000000000004', 100)$$,
+  $$select * from public.admin_deduct_student_coins_v2('STUDENT-ONE', -1, '10000000-0000-0000-0000-000000000004', 100, 0)$$,
   'P0001', 'INVALID_AMOUNT',
   'negative deduction is rejected'
 );
 select throws_ok(
-  $$select * from public.admin_deduct_student_coins('STUDENT-ONE', 101, '10000000-0000-0000-0000-000000000005', 100)$$,
+  $$select * from public.admin_deduct_student_coins_v2('STUDENT-ONE', 101, '10000000-0000-0000-0000-000000000005', 100, 0)$$,
   'P0001', 'INSUFFICIENT_COINS',
   'deduction above the balance is rejected'
 );
 select throws_ok(
-  $$select * from public.admin_deduct_student_coins('STUDENT-ONE', 40, '10000000-0000-0000-0000-000000000006', 99)$$,
+  $$select * from public.admin_deduct_student_coins_v2('STUDENT-ONE', 40, '10000000-0000-0000-0000-000000000006', 99, 0)$$,
   'P0001', 'BALANCE_CHANGED',
   'stale expected balance is rejected'
 );
 
 select results_eq(
-  $$select balance from public.admin_deduct_student_coins(' STUDENT-ONE ', 40, '10000000-0000-0000-0000-000000000007', 100)$$,
+  $$select balance from public.admin_deduct_student_coins_v2(' STUDENT-ONE ', 40, '10000000-0000-0000-0000-000000000007', 100, 0)$$,
   $$values (60::integer)$$,
   'valid deduction returns the new balance'
 );
 select is((select coins from public.students where student_id = 'STUDENT-ONE'), 60, 'valid deduction updates the student balance');
 select is((select count(*)::integer from public.coin_ledger where request_id = '10000000-0000-0000-0000-000000000007'), 1, 'valid deduction writes one ledger row');
 select is((select transaction_type from public.coin_ledger where request_id = '10000000-0000-0000-0000-000000000007'), 'admin_deduction', 'deduction ledger row has its transaction type');
+select is((select metadata ->> 'expected_wallet_version' from public.coin_ledger where request_id = '10000000-0000-0000-0000-000000000007'), '0', 'deduction ledger records the confirmed wallet version');
 
 select results_eq(
-  $$select balance, replayed from public.admin_deduct_student_coins('STUDENT-ONE', 40, '10000000-0000-0000-0000-000000000007', 100)$$,
+  $$select balance, replayed from public.admin_deduct_student_coins_v2('STUDENT-ONE', 40, '10000000-0000-0000-0000-000000000007', 100, 0)$$,
   $$values (60::integer, true)$$,
   'deduction replay returns the original balance and replay marker'
 );
 select is((select coins from public.students where student_id = 'STUDENT-ONE'), 60, 'deduction replay does not change the balance');
 select throws_ok(
-  $$select * from public.admin_deduct_student_coins('STUDENT-ONE', 39, '10000000-0000-0000-0000-000000000007', 100)$$,
+  $$select * from public.admin_deduct_student_coins_v2('STUDENT-ONE', 39, '10000000-0000-0000-0000-000000000007', 100, 0)$$,
   'P0001', 'IDEMPOTENCY_CONFLICT',
   'deduction request reuse with a different amount is rejected'
 );
+select throws_ok(
+  $$select * from public.admin_deduct_student_coins_v2('STUDENT-ONE', 40, '10000000-0000-0000-0000-000000000007', 100, 1)$$,
+  'P0001', 'IDEMPOTENCY_CONFLICT',
+  'deduction replay with a different confirmed wallet version is rejected'
+);
+
+-- Balance 60/version 1 is confirmed, then two ledger writes move it away and
+-- back to 60. A stale confirmation must fail even though the numeric balance
+-- once again matches the snapshot.
+update public.students set coins = 55 where student_id = 'STUDENT-ONE';
+insert into public.coin_ledger (request_id, student_id, transaction_type, delta, balance_before, balance_after, metadata)
+select '10000000-0000-0000-0000-000000000020', id, 'legacy_import', -5, 60, 55, '{}'::jsonb
+from public.students where student_id = 'STUDENT-ONE';
+update public.students set coins = 60 where student_id = 'STUDENT-ONE';
+insert into public.coin_ledger (request_id, student_id, transaction_type, delta, balance_before, balance_after, metadata)
+select '10000000-0000-0000-0000-000000000021', id, 'legacy_import', 5, 55, 60, '{}'::jsonb
+from public.students where student_id = 'STUDENT-ONE';
+select throws_ok(
+  $$select * from public.admin_deduct_student_coins_v2('STUDENT-ONE', 10, '10000000-0000-0000-0000-000000000022', 60, 1)$$,
+  'P0001', 'BALANCE_CHANGED',
+  'ABA balance change is rejected when the displayed balance returns to its prior value'
+);
+select is((select coins from public.students where student_id = 'STUDENT-ONE'), 60, 'ABA rejection preserves the restored balance');
 
 select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-000000000011', true);
 set local role authenticated;
@@ -232,7 +268,7 @@ select throws_ok(
 
 select set_config('request.jwt.claim.sub', '00000000-0000-0000-0000-000000000001', true);
 select throws_ok(
-  $$select * from public.admin_deduct_student_coins('STUDENT-ONE', 61, '10000000-0000-0000-0000-000000000008', 60)$$,
+  $$select * from public.admin_deduct_student_coins_v2('STUDENT-ONE', 61, '10000000-0000-0000-0000-000000000008', 60, 3)$$,
   'P0001', 'INSUFFICIENT_COINS',
   'admin deduction cannot make the balance negative'
 );

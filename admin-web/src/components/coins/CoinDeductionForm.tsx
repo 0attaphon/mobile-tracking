@@ -96,6 +96,7 @@ export function CoinDeductionForm() {
           amount,
           requestId: activeRequestId,
           expectedBalance: student.balance,
+          expectedWalletVersion: student.walletVersion,
         })
       } catch {
         // The server may have processed this request before the connection failed.
@@ -105,8 +106,8 @@ export function CoinDeductionForm() {
       }
 
       if (result.ok) {
-        const updatedBalance = result.data.balance
-        setStudent({ ...student, balance: updatedBalance })
+        let updatedBalance = result.data.balance
+        setStudent({ ...student, balance: updatedBalance, walletVersion: student.walletVersion + 1 })
         setAmountText('')
         setRequestId(null)
         const confirmedEntry: CoinDeductionHistoryItem = {
@@ -122,6 +123,11 @@ export function CoinDeductionForm() {
         if (historyResult.ok) {
           // The server ledger is authoritative; replacing it also keeps retries/replays to one row.
           setHistory(historyResult.data)
+        }
+        const refreshed = await lookupStudentByCode(student.code)
+        if (refreshed.ok) {
+          setStudent(refreshed.data)
+          updatedBalance = refreshed.data.balance
         }
         setNotice(`${result.data.replayed ? 'รายการนี้ดำเนินการแล้ว' : 'หักเหรียญสำเร็จ'} ยอดคงเหลือ ${formatCoins(updatedBalance)} เหรียญ`)
       } else if (result.code === 'BALANCE_CHANGED') {

@@ -19,20 +19,22 @@ test('student codes are trimmed and blank codes are rejected', () => {
 
 test('deduction amount rejects zero, negative, decimal, unsafe, and excessive values', () => {
   for (const amount of [0, -1, 1.5, Number.MAX_SAFE_INTEGER + 1]) {
-    assert.equal(validateDeduction({ amount, expectedBalance: 100, requestId }), 'INVALID_AMOUNT')
+    assert.equal(validateDeduction({ amount, expectedBalance: 100, expectedWalletVersion: 0, requestId }), 'INVALID_AMOUNT')
   }
   assert.equal(
-    validateDeduction({ amount: 101, expectedBalance: 100, requestId }),
+    validateDeduction({ amount: 101, expectedBalance: 100, expectedWalletVersion: 0, requestId }),
     'INSUFFICIENT_COINS'
   )
-  assert.equal(validateDeduction({ amount: 100, expectedBalance: 100, requestId }), null)
+  assert.equal(validateDeduction({ amount: 100, expectedBalance: 100, expectedWalletVersion: 0, requestId }), null)
 })
 
 test('amount and expected balance stay within PostgreSQL int4 range', () => {
   const int4Max = 2_147_483_647
-  assert.equal(validateDeduction({ amount: int4Max, expectedBalance: int4Max, requestId }), null)
-  assert.equal(validateDeduction({ amount: int4Max + 1, expectedBalance: int4Max, requestId }), 'INVALID_AMOUNT')
-  assert.equal(validateDeduction({ amount: 1, expectedBalance: int4Max + 1, requestId }), 'INVALID_AMOUNT')
+  assert.equal(validateDeduction({ amount: int4Max, expectedBalance: int4Max, expectedWalletVersion: 0, requestId }), null)
+  assert.equal(validateDeduction({ amount: int4Max + 1, expectedBalance: int4Max, expectedWalletVersion: 0, requestId }), 'INVALID_AMOUNT')
+  assert.equal(validateDeduction({ amount: 1, expectedBalance: int4Max + 1, expectedWalletVersion: 0, requestId }), 'INVALID_AMOUNT')
+  assert.equal(validateDeduction({ amount: 1, expectedBalance: int4Max, expectedWalletVersion: -1, requestId }), 'INVALID_AMOUNT')
+  assert.equal(validateDeduction({ amount: 1, expectedBalance: int4Max, expectedWalletVersion: Number.MAX_SAFE_INTEGER + 1, requestId }), 'INVALID_AMOUNT')
   assert.equal(serverErrorCode('database rejected INVALID_AMOUNT'), 'INVALID_AMOUNT')
 })
 

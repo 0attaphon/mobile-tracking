@@ -49,6 +49,7 @@ export async function runAdminAction<TContext extends { isAdmin: boolean }, TRes
 export function validateDeduction(input: {
   amount: number
   expectedBalance: number
+  expectedWalletVersion: number
   requestId: string
 }): CoinActionErrorCode | null {
   if (!Number.isSafeInteger(input.amount) || input.amount <= 0 || input.amount > POSTGRES_INT4_MAX) {
@@ -59,6 +60,9 @@ export function validateDeduction(input: {
     input.expectedBalance < 0 ||
     input.expectedBalance > POSTGRES_INT4_MAX
   ) {
+    return 'INVALID_AMOUNT'
+  }
+  if (!Number.isSafeInteger(input.expectedWalletVersion) || input.expectedWalletVersion < 0) {
     return 'INVALID_AMOUNT'
   }
   if (input.amount > input.expectedBalance) return 'INSUFFICIENT_COINS'
