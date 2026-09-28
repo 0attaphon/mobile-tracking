@@ -12,6 +12,8 @@ function formatCoins(value: number) {
   return new Intl.NumberFormat('th-TH').format(value)
 }
 
+const RETRYABLE_ERROR = 'เชื่อมต่อไม่สำเร็จ กรุณาลองใหม่อีกครั้ง'
+
 export function CoinDeductionForm() {
   const [studentCode, setStudentCode] = useState('')
   const [student, setStudent] = useState<StudentCoinSummary | null>(null)
@@ -36,10 +38,25 @@ export function CoinDeductionForm() {
     setStudent(null)
     setAmountText('')
     setRequestId(null)
-    const result = await lookupStudentByCode(studentCode)
-    if (result.ok) setStudent(result.data)
-    else setLookupError(result.message)
-    setLoading(false)
+    try {
+      const result = await lookupStudentByCode(studentCode)
+      if (result.ok) setStudent(result.data)
+      else setLookupError(result.message)
+    } catch {
+      setLookupError(RETRYABLE_ERROR)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  function handleStudentCodeChange(value: string) {
+    setStudentCode(value)
+    setStudent(null)
+    setAmountText('')
+    setRequestId(null)
+    setLookupError('')
+    setSubmitError('')
+    setNotice('')
   }
 
   function handleAmountChange(value: string) {
@@ -62,32 +79,46 @@ export function CoinDeductionForm() {
     setLoading(true)
     setSubmitError('')
     setNotice('')
-    const result = await deductCoins({
-      studentCode: student.code,
-      amount,
-      requestId: activeRequestId,
-      expectedBalance: student.balance,
-    })
-    if (result.ok) {
-      const updatedBalance = result.data.balance
-      setStudent({ ...student, balance: updatedBalance })
-      setAmountText('')
-      setRequestId(null)
-      setNotice(`หักเหรียญสำเร็จ ยอดคงเหลือ ${formatCoins(updatedBalance)} เหรียญ`)
-    } else if (result.code === 'BALANCE_CHANGED') {
-      const refreshed = await lookupStudentByCode(student.code)
-      setRequestId(null)
-      setAmountText('')
-      if (refreshed.ok) setStudent(refreshed.data)
-      else {
-        setStudent(null)
-        setLookupError(refreshed.message)
+    try {
+      let result: Awaited<ReturnType<typeof deductCoins>>
+      try {
+        result = await deductCoins({
+          studentCode: student.code,
+          amount,
+          requestId: activeRequestId,
+          expectedBalance: student.balance,
+        })
+      } catch {
+        // The server may have processed this request before the connection failed.
+        // Preserve the ID so an unchanged retry is idempotent.
+        setSubmitError(RETRYABLE_ERROR)
+        return
       }
-      setSubmitError(COIN_ERROR_MESSAGES.BALANCE_CHANGED)
-    } else {
-      setSubmitError(result.message)
+
+      if (result.ok) {
+        const updatedBalance = result.data.balance
+        setStudent({ ...student, balance: updatedBalance })
+        setAmountText('')
+        setRequestId(null)
+        setNotice(`หักเหรียญสำเร็จ ยอดคงเหลือ ${formatCoins(updatedBalance)} เหรียญ`)
+      } else if (result.code === 'BALANCE_CHANGED') {
+        setRequestId(null)
+        setAmountText('')
+        setStudent(null)
+        try {
+          const refreshed = await lookupStudentByCode(student.code)
+          if (refreshed.ok) setStudent(refreshed.data)
+          else setLookupError(refreshed.message)
+        } catch {
+          setLookupError(RETRYABLE_ERROR)
+        }
+        setSubmitError(COIN_ERROR_MESSAGES.BALANCE_CHANGED)
+      } else {
+        setSubmitError(result.message)
+      }
+    } finally {
+      setLoading(false)
     }
-    setLoading(false)
   }
 
   return (
@@ -98,7 +129,7 @@ export function CoinDeductionForm() {
           <input
             id="student-code"
             value={studentCode}
-            onChange={(event) => setStudentCode(event.target.value)}
+            onChange={(event) => handleStudentCodeChange(event.target.value)}
             disabled={busy}
             autoComplete="off"
             className="min-w-0 flex-1 rounded-lg border border-slate-300 bg-transparent px-3 py-2 dark:border-slate-700"
