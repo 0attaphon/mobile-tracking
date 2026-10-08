@@ -28,9 +28,10 @@ npm run android        # build dev client ครั้งแรก
 - **มือถือจริง (Wi‑Fi อย่างเดียว):** `npm start` หรือ `npm run start:tunnel`
 - โมเดลใบหน้า: `assets/models/mobile_face_net.tflite` (ต้องเป็นไฟล์ binary จริง ไม่ใช่ HTML)
 - ไอคอนแอป: `assets/icon_pet.png` · Splash/loading: `assets/pet_loading.png`
-- Rive: แมว (`pet_cat.riv`) · แมวส้ม/หมา (`pet_dog_and_cat.riv`, input `cat/dog`: false=แมวส้ม, true=หมา); outfit inputs ทุกสัตว์: `straw_hat`, `wizard_hat`, `sunglass`, `hat`, `hat2`–`hat10`, `hood`, `suit`, `coat`, `uniform`, `glass2` (ไฟล์ cloud `Pet_cat` มี layer/input ครบแล้ว — export `.riv` ใหม่ทับ `assets/rive/pet_cat.riv` ต้องอัปเกรดแพลนของ Rive ก่อน MCP export ไม่ได้; `pet_dog_and_cat.riv` ยังไม่ยืนยันว่ามี input ชุดใหม่ ต้องเปิดไฟล์นั้นเช็ค/เพิ่ม layer ให้ตรงกันถ้าต้องการให้หมา/แมวส้มใส่ชุดใหม่ได้ด้วย)
-- **Outfit ชุดใหม่ (hat11, hat12, suit2–suit6) ผูกผ่าน ViewModel คนละกลไกกับของเดิม 19 ชิ้น:** ตัวเดิมทั้งหมดเป็น legacy SMI boolean input ยิงตรงผ่าน `setInputState(stateMachineName, name, value)`; 7 ชิ้นใหม่นี้ไม่มี transition ผูกกับ SMI input เลย ตัวควบคุมจริงคือ ViewModel `"Hats"` (instance `"Main"`, default view model ของ artboard) — ต้องยิงผ่าน `ref.setBoolean(name, value)` แทน และต้องเปิด `dataBinding={AutoBind(true)}` บน `<Rive>` ให้ ViewModel instance bind เข้ากับ artboard ก่อน ถึงจะมีผล ชื่อ input ทั้ง 7 ตัวอยู่ใน `VIEW_MODEL_BOUND_OUTFIT_INPUTS` (`types/pet.ts`) — `PetRive.tsx` เช็ค list นี้เพื่อเลือกยิง `setBoolean` หรือ `setInputState` ต่อ input แต่ละตัว ถ้าเพิ่ม outfit ใหม่ผ่าน ViewModel อีกต้องเติมชื่อใน list นี้ด้วย (ไม่ทำแล้วเครื่องแต่งกายจะซื้อ/สวมได้ใน UI แต่ตัวสัตว์ไม่เปลี่ยนภาพ — silent no-op)
-- `pet_dog_and_cat.riv` มี input ใหม่ครบแล้ว (`hat11`, `hat12`, `suit2`–`suit6`) แต่ยังไม่ export ทับไฟล์จริงใน `assets/rive/` (Rive MCP export ถูก sandbox บล็อกเขียนไฟล์ทุก path — ต้อง export มือผ่านเมนู editor เอง) — `pet_cat.riv` ยังไม่ตรวจ (อยู่คนละ tab ใน Rive editor, MCP เห็นแค่ tab active) ต้องเปิด tab `pet_cat` แล้วเช็ค/export ให้ตรงกันก่อนของใหม่จะโชว์บนแมวธรรมดาได้
+- Rive: แมว (`pet_cat.riv`) · แมวส้ม/หมา (`pet_dog_and_cat.riv`, input `cat/dog`: false=แมวส้ม, true=หมา); ชุดเดิม 19 ชิ้นใช้ legacy SMI boolean ผ่าน `setInputState` ตามเดิม
+- **Outfit ผ่าน ViewModel `Hats` (instance `Main`)**: `hat11`–`hat15` และ `suit2`–`suit16` ใช้ `ref.setBoolean(name, value)` โดยเปิด `dataBinding={AutoBind(true)}` บน `<Rive>`; รายชื่ออยู่ใน `VIEW_MODEL_BOUND_OUTFIT_INPUTS` (`types/pet.ts`) ห้ามส่งชื่อเหล่านี้เป็น SMI input
+- **ร้านค้าชุดใหม่ 13 ชิ้น**: `hat13`–`hat15` (นินจา/วงแหวนเทวดา/โจรสลัด), `suit7`–`suit16` (คุณหมอ/เทวดา/นินจา/ซามูไร/เมด/กัปตัน/โจรสลัด/เจ้าหญิง 3 สี); thumbnail ใน `assets/shopAssets.ts`, ชื่อ/ราคา/rarity/`riveInput` ใน `types/shop.ts`; ซื้อและสวม/ถอดผ่าน flow เดิม โดย `getOutfitRiveInputs` ส่ง true สำหรับชิ้นที่สวมและ false สำหรับชิ้นที่ถอด; เพิ่ม allowlist ของหมา/แมวส้มครบแล้ว
+- **สถานะไฟล์ Rive (22 ก.ย. 2026)**: ผู้ใช้ export ทับ `assets/rive/pet_cat.riv` และ `pet_dog_and_cat.riv` แล้ว ตรวจ header RIVE และพบชื่อชุดใหม่ครบทั้ง 13 ในทั้งสองไฟล์; ตรวจ binding `Hats` ของหมา/แมวส้มผ่าน editor แล้ว ยังต้องลองภาพสวม/ถอดบน dev client จริง
 
 ## โครงสร้างหน้า (app/(tabs)/)
 - `index.tsx` — หน้า Home: สัตว์เลี้ยง (Rive + เครื่องแต่งกาย), HUD, stat bar, ของตกแต่ง, **แต่งตัว** (`OutfitPicker`), **แตะชื่อเปลี่ยนชื่อ**, **sidebar สลับสัตว์** (`PetSwitcherSidebar`)
@@ -54,7 +55,7 @@ npm run android        # build dev client ครั้งแรก
 - `IdentityGate` — flow: `!isRegistered` → student-register → tabs; restore session จาก Supabase; flush sync queue; **ไม่บังคับ** face-enroll
 
 ## Stores (Zustand, src/stores/)
-- `petStore` — name/level/exp/happiness/coins, `activePetId`, `species`, equippedItems; `setActivePet/setPetName/...`; **persist** `name`, `activePetId`, `species`, `coins`, `equippedItems` (`pet-storage`). `addCoins`/`spendCoins` push the delta to `students.coins` server-side via `syncCoinDelta` (`sync.ts`, offline-queued, atomic `increment_student_coins` RPC) so a reinstall restores the balance instead of resetting to 0 — `hydrateCoins(coins)` is called with the server value right after `registerStudent`/`restoreRegisteredStudent` succeed (`student-register.tsx`, `IdentityGate.tsx`)
+- `petStore` เก็บ `confirmedCoins`, `pendingRewardCoins`, `pendingRewardAmounts` และ `coins = confirmedCoins + pendingRewardCoins` ใน `pet-storage`; `walletRequestVersion` กัน response เก่าทับยอดใหม่ ใช้ `refreshWallet`/`flushWalletRewards` โหลดและยืนยันยอด `addCoins` ปิดแล้ว การซื้อใช้ `purchaseStore` + transactional RPC ส่วน name/species/activePetId/equippedItems ยังคง persist
 - `userStore` — `studentId`, `isRegistered` (**persist**), `nickname` (**persist**, ชื่อเล่นที่เพื่อนร่วมห้องเห็นบน leaderboard — แยกจากชื่อสัตว์เลี้ยงใน `petStore`), ownedItems; `setRegistered(studentId)`, `setNickname`
 - `focusStore` — สถานะ session (`idle`/`in_progress`/`completed`/`failed`), `isPaused`, timer, streak, totalFocusMinutes, **moodLog (persist AsyncStorage)**; helper `getCoinsForDuration`, `getSummary`; **`STREAK_BONUSES`** ให้โบนัสเหรียญเมื่อสตรีคถึง 1/3/7/14/30 วัน; **catch-up**: ขาดสตรีคแล้วกลับมาโฟกัสภายในเงื่อนไข (สตรีคเดิม ≥3, ไม่มี freeze) → เหรียญ 2 เท่าครั้งเดียว (`catchUpAvailable`); **Streak Freeze** (`freezeTokens`, สะสมสูงสุด 3, ได้ +1 ทุกสตรีคครบ 7 วัน) — ถ้ามี freeze ตอนขาดสตรีค จะใช้อัตโนมัติรักษาสตรีคไว้แทนการขาด (ไม่ได้โบนัส catch-up ซ้ำ)
 - `choreQuestStore` — สถานะเควสทำงานบ้านรายวัน (completedAt, retryCount), daily reset, ให้ coins ตอน complete; สุ่ม 3-5 เควส/วันจาก pool 26 ข้อ (`todayQuestIds`, seed คงที่ต่อวันด้วย `pickDailyQuestIds`); เก็บ `recentHashes` (hash รูป 5 รูปล่าสุดต่อเควส, local เท่านั้น) กันส่งรูปเดิมซ้ำ
@@ -74,7 +75,7 @@ npm run android        # build dev client ครั้งแรก
 - `choreVerifier.ts` — ตรวจเควสตามลำดับ: verifyFace → เช็ค hash รูปซ้ำ (`isDuplicateHash`, เจอซ้ำ = reject ทันทีไม่ต้องรัน ML Kit) → ML Kit image labeling (log label ใน console/`__DEV__` alert); `expectedLabels` ปรับตาม label จริงที่ ML Kit คืน (เช่น room+chair ไม่ใช่ broom); ผ่านครบถึง `recordHash`
 - `../utils/imageHash.ts` — `hashImageFile(uri)`: อ่านไฟล์ผ่าน `expo-file-system` (base64) แล้ว SHA-1 ผ่าน `expo-crypto`; ใช้เทียบรูปซ้ำเท่านั้น ไม่เก็บ/ไม่อัปโหลดรูป
 - `firebase/` — config, functions (AI tip เท่านั้น)
-- `supabase/` — `client.ts`, `register.ts` (anon auth + RPC, คืน `coins` ปัจจุบันมาด้วยตอน register/restore), `sync.ts` (focus/daily_usage/chore/coin_delta ผ่าน offline queue + `syncNickname`/`fetchClassLeaderboard` แบบ best-effort ไม่ผ่าน queue)
+- `supabase/` — `client.ts`, `register.ts` (anon auth + RPC, คืน `coins` ปัจจุบันมาด้วยตอน register/restore), `sync.ts` (focus/daily_usage/chore/coin_delta ผ่าน legacy offline queue + `syncNickname`/`fetchClassLeaderboard` แบบ best-effort ไม่ผ่าน queue); `pendingRewards.ts` เป็นคิวรางวัล wallet v2 ที่ key `supabase-pending-rewards-v2` แยกตาม `studentId`, dedupe ด้วย request UUID และ serialize read/modify/write รวมช่วง flush เพื่อไม่ให้ enqueue พร้อมกันสูญหาย; `wallet.ts` map error เป็น stable code และส่ง challenge nonce ไป `record_focus_completion`/`record_chore_completion`/`record_outdoor_completion` เท่านั้น—ไม่เรียก internal `claim_student_reward` โดยตรง
 
 ## Admin Web (`admin-web/`)
 - Next.js App Router + Supabase SSR · deploy บน **Vercel** (Root Directory = `admin-web`)
@@ -103,7 +104,7 @@ npm run android        # build dev client ครั้งแรก
 4. **ร้านค้า** — ซื้อด้วยเหรียญ, owned → สวม/วาง/ตั้ง theme
 5. **เสริมแรงเชิงบวก** — fail ไม่ลงโทษ
 6. **ลงทะเบียนใบหน้า** — **ไม่บังคับ** ตอนเปิดแอป; เปิดจากหน้าเควสหรือ Stats; เก็บ embedding ใน SecureStore ไม่เก็บรูป; re-enroll ได้จาก Stats
-7. **เควสทำงานบ้าน** — pool 26 เควส (`CHORE_QUESTS` ใน `focus.ts`, รางวัล 15/25/40 ⭐ ตามความยาก); ทุกวันสุ่มมาแสดง **3-5 ข้อ** ต่อวัน (`pickDailyQuestIds` ใน `choreQuestStore.ts`, seed = `studentId:วันที่` ผ่าน mulberry32 → สุ่มคงที่ทั้งวัน รีสตาร์ทแอปไม่เปลี่ยน, เปลี่ยนตอนข้ามวันเท่านั้น); ถ่าย in-app เท่านั้น (ตัดเลือกจากคลังออกแล้วเพื่อกันโกง) → ต้อง enroll ใบหน้าก่อน + ผ่านทั้งใบหน้า + ไม่ใช่รูปซ้ำ (hash เทียบ 5 รูปล่าสุดต่อเควส) + label งานบ้าน; ลองใหม่ได้ไม่จำกัดจนกว่าจะสำเร็จ; รางวัล coins → `petStore.addCoins`. *20 เควสใหม่ (พับผ้า/เช็ดกระจก/ดูดฝุ่น/ล้างห้องน้ำ ฯลฯ) ยังไม่ทดสอบ label จริงบนอุปกรณ์ — ต้องเช็คก่อนใช้งานจริง เหมือนที่เคยเตือนไว้กับรดน้ำต้นไม้/จัดเตียง*
+7. **เควสทำงานบ้าน** — pool 26 เควส (`CHORE_QUESTS` ใน `focus.ts`, รางวัล 15/25/40 ⭐ ตามความยาก); ทุกวันสุ่มมาแสดง **3-5 ข้อ** ต่อวัน (`pickDailyQuestIds` ใน `choreQuestStore.ts`, seed = `studentId:วันที่` ผ่าน mulberry32 → สุ่มคงที่ทั้งวัน รีสตาร์ทแอปไม่เปลี่ยน, เปลี่ยนตอนข้ามวันเท่านั้น); ถ่าย in-app เท่านั้น (ตัดเลือกจากคลังออกแล้วเพื่อกันโกง) → ต้อง enroll ใบหน้าก่อน + ผ่านทั้งใบหน้า + ไม่ใช่รูปซ้ำ (hash เทียบ 5 รูปล่าสุดต่อเควส) + label งานบ้าน; ลองใหม่ได้ไม่จำกัดจนกว่าจะสำเร็จ; รางวัล coins → `petStore.queueReward` + server challenge + wallet flush. *20 เควสใหม่ (พับผ้า/เช็ดกระจก/ดูดฝุ่น/ล้างห้องน้ำ ฯลฯ) ยังไม่ทดสอบ label จริงบนอุปกรณ์ — ต้องเช็คก่อนใช้งานจริง เหมือนที่เคยเตือนไว้กับรดน้ำต้นไม้/จัดเตียง*
 8. **เปลี่ยนชื่อสัตว์เลี้ยง** — แตะชื่อบน Home → modal; บันทึกลง `petStore.name` (persist AsyncStorage)
 9. **สัตว์เลี้ยงหลายตัว** — แมว default (`pet_cat`); แมวส้ม (`pet_orange_cat`, 150 ⭐) · หมา (`pet_dog`, 120 ⭐); สลับผ่าน sidebar หรือร้านค้า → `setActivePet` sync `species` + Rive file
 10. **ลงทะเบียนนักเรียน** — 1 รหัส = 1 เครื่อง; ลบแอปแล้วติดตั้งใหม่ + รหัสเดิม + device เดิม → `register_student` restore session (ไม่ error ซ้ำ)
@@ -123,7 +124,40 @@ npm run android        # build dev client ครั้งแรก
 | ค้างหน้า loading | AsyncStorage hydrate ช้า/ล้ม | รอ fallback 1.5s หรือ clear app data |
 | แอพเด้ง (SIGABRT) ตอนเปิดหมา/แมวส้ม | `pet_dog_and_cat.riv` ไม่มี input `coat`/`glass2`/`uniform` บน State Machine 1 แต่ `PetRive` ยิง `setInputState` ทุก outfit input แบบไม่กรอง — native throw `StateMachineInputException` ข้าม JNI boundary จับด้วย JS try/catch ไม่ได้ | กรองด้วย `RIVE_SOURCE_SUPPORTED_OUTFIT_INPUTS` (`types/pet.ts`) ก่อน `setInputState` ใน `PetRive.tsx`; ของถาวรคือเพิ่ม layer+input ที่ขาดใน `pet_dog_and_cat.riv` แล้วเอาออกจาก allowlist |
 
+## Wallet v2 — สัญญาปัจจุบัน
+
+หัวข้อเก่าที่กล่าวถึง `addCoins`/`spendCoins` ส่ง delta ถูกแทนด้วย flow นี้: Postgres `students.coins` เป็นยอด confirmed, `coin_ledger` เป็นประวัติ, `student_inventory` เป็น ownership; ราคา/version ตรวจจาก server catalog การซื้อไม่มี local decrement หรือ local ownership grant
+
+- `petStore` — wallet fields/actions/persistence: see "Wallet v2" below. `addCoins` is disabled; purchases use `purchaseStore` + transactional RPC. Pet name/species/activePetId/equippedItems remain persisted in `pet-storage`.
+- `supabase-pending-rewards-v2` เก็บ `{version:2, items: PendingReward[]}` แยกด้วย `studentId`; request UUID เดิม retry ได้ serialize enqueue/list/flush ทั้งช่วง network ป้องกัน lost update; flush หลัง restore/reconnect ไม่ส่งคิวของนักเรียนอื่น
+- Focus สร้าง server session ก่อนเริ่ม; chore/outdoor ใช้ assignment/verification attempt + server challenge nonce. `PendingReward.sourceId` คือ nonce ส่งผ่าน `record_focus_completion`/`record_chore_completion`/`record_outdoor_completion`; `claim_student_reward` เป็น internal ห้าม client เรียกตรง
+- `purchaseStore`: `isSubmitting/pendingPurchase/lastError`; persist UUID + student/item/catalog version ที่ `wallet-pending-purchase-v1:{studentKey}` ก่อน RPC `purchase_shop_item`; timeout/offline/UNKNOWN คง request เดิมไว้ retry หลัง restart; success/replay โหลด balance+inventory ใหม่
+- `get_my_wallet` และ `get_my_coin_history(50)` คืนข้อมูล auth student เท่านั้น; หน้า Shop refresh ตอน focus หน้า; Home badge เปิด history
+- คิวเก่า `supabase-sync-queue` เก็บ legacy `coin_delta` และแสดง `legacy_pending`; ไม่ replay/เดาผลส่ง/ลบทิ้งอัตโนมัติ เพราะผลส่งเดิมอาจสำเร็จแล้ว ต้องตรวจ DB และหลักฐานก่อนแก้ผ่าน workflow ที่มี audit
+- Legacy inventory ใช้ `import_legacy_inventory` พร้อม UUID persist ที่ `wallet-legacy-inventory-v1:*`; กรอง unknown ID หลังยืนยัน retain equipped/active pet เฉพาะที่ server ยืนยัน Offline ใช้ของเดิมบนเครื่องต่อได้
+- Migrations: `20260923000000_coin_wallet_ledger.sql`, `20260924145651_wallet_focus_streaks.sql`; cutover `20260925033211_revoke_legacy_coin_delta.sql`; admin contract `20261001151030_admin_deduction_wallet_version.sql` ลำดับ rollout/rollback อยู่ `supabase/README.md` การมีไฟล์ใน repo ไม่ยืนยันว่า deploy แล้ว
+
+### Wallet troubleshooting
+
+| อาการ | ตรวจ/แก้ |
+|--------|---------|
+| รอยืนยันค้าง | ตรวจ network/auth/challenge และคิวของ student ปัจจุบัน Retry UUID เดิม ห้ามเพิ่ม local coins หรือออก nonce ใหม่เพื่อรับรางวัลเดิม |
+| `legacy_pending` | รักษาคิว ตรวจ delivery เดิมกับ DB; reconnect ตัดสินผลเก่าที่ไม่ทราบไม่ได้ |
+| `OFFLINE` ตอนซื้อ | ต่อเน็ตแล้ว retry ชิ้นเดิมด้วย persisted UUID |
+| `UNKNOWN` หลังซื้อ | RPC อาจสำเร็จแล้ว โหลด wallet/inventory และ retry request เดิม อย่าลบ purchase request เอง |
+| `INSUFFICIENT_COINS` | confirmed ไม่พอ รอยืนยันซื้อไม่ได้ โหลดกระเป๋าใหม่ |
+| `BALANCE_CHANGED` ใน admin | โหลด balance + walletVersion ใหม่ ให้ผู้ดูแลตรวจและยืนยันใหม่ |
+| ของเดิมไม่คืน | ตรวจ auth student, inventory marker/UUID และ server ownership ห้าม reset marker หรือ grant local เพื่อเดาผล |
+| ค้าง loading และมีคิว | เปิดใหม่ เก็บ AsyncStorage/request ไว้ก่อน ห้าม clear app data เพื่อแก้ wallet |
+
 ## ประวัติการเปลี่ยนแปลงล่าสุด
+- เพิ่ม runbook wallet v2 และ troubleshooting; local gate 58 tests + TypeScript ผ่าน รวม restart/replay purchase UUID; Android smoke และ production rollout ยังต้องตรวจแยก
+- ต่อ wallet v2 เข้ากับ `petStore` และ reward flow แล้ว: แยกยอด confirmed/pending (`รอยืนยัน`), enqueue request ก่อน optimistic UI, flush หลัง restore/reconnect, ไม่ replay legacy `coin_delta`; current reward and purchase contracts are documented in Wallet v2 below.
+- เพิ่ม transactional purchase client: `purchaseItem(itemId, catalogVersion, requestId)` ส่ง UUID เดิมเมื่อ retry และหลัง success/replay จะโหลด confirmed balance + `student_inventory` จาก Supabase พร้อมกันก่อน hydrate `petStore`/`userStore`; error/timeout ไม่แก้ ownership ในเครื่อง
+- เพิ่ม one-time legacy inventory migration ตอน restore/reconnect: เก็บ request UUID แยกตาม `studentId` ที่ `wallet-legacy-inventory-v1:*` ก่อนเรียก RPC, retry UUID เดิม, กรอง unknown item, แล้วคง equipped item/active pet เฉพาะรายการที่ server ยืนยัน; ถ้า offline จะยังใช้ owned items ที่ persist ในเครื่องได้
+- ร้านค้าใช้ `purchaseStore.ts` + `purchase_shop_item` แล้ว: ต้อง online, เก็บ request UUID แยกนักเรียนก่อน RPC, ล็อกปุ่มระหว่างส่ง, timeout คง request เดิมให้ retry, success/replay hydrate balance+inventory จาก server ก่อน apply item และ refresh ทุกครั้งที่หน้า Shop focus; ไม่มี local coin decrement/ownership grant
+- เพิ่มหน้า `app/coin-history.tsx` จาก `get_my_coin_history(50)` แสดงชื่อรายการภาษาไทย, delta มีเครื่องหมาย, balance หลังรายการ และเวลาท้องถิ่น; เข้าได้โดยแตะ badge เหรียญบน Home และ RPC/RLS คืนเฉพาะ ledger ของ auth student
+- เพิ่มชุดใหม่ 13 ชิ้น (`hat13`–`hat15`, `suit7`–`suit16`) ในร้านค้า พร้อม PNG, ราคา, rarity และ mapping ViewModel `Hats`; ผู้ใช้ export ไฟล์ Rive ใหม่ทั้งสองไฟล์เข้าโปรเจกต์แล้ว
 - เพิ่มเควสทำงานบ้าน 20 อัน (รวมเป็น pool 26 อัน) + เปลี่ยนจากแสดงครบทุกวันเป็นสุ่ม 3-5 ข้อ/วัน (seed คงที่ต่อวันด้วย `studentId+วันที่`, `pickDailyQuestIds` ใน `choreQuestStore.ts`); แบ่งรางวัลตามความยาก 15/25/40 ⭐; sync `shared/choreQuestLabels.ts` ให้ครบทุก id (เดิมขาด 2 อันจากรอบก่อน). *เควสใหม่ 20 อันยังไม่ทดสอบ label จริงจาก ML Kit บนอุปกรณ์จริง — ต้อง verify ก่อนใช้งานจริง*
 - Fix แอพเด้งตอนเปิด `pet_dog_and_cat.riv`: เพิ่ม allowlist `RIVE_SOURCE_SUPPORTED_OUTFIT_INPUTS` กรอง outfit input ที่ยังไม่มีในไฟล์ (`coat`/`glass2`/`uniform`) ก่อนยิง `setInputState` — ไฟล์นี้ยังขาด layer/input พวกนี้ ต้องเพิ่มใน Rive editor แล้วลบออกจาก allowlist ทีหลัง
 - เพิ่มเครื่องแต่งกายใหม่ 15 ชิ้นในร้านค้า (หมวกทรงสูง, เบเร่ต์ 4 สี/ลาย, บักเก็ต, ไหมพรม, มงกุฎดอกไม้, แก๊ปโบว์, หูแมว, แก๊ปปลา, เสื้อกันฝน, ทักซิโด้, เสื้อโค้ท, แว่นทรงกลม, ชุดนักเรียน) — map เข้า Rive input `hat`/`hat2`–`hat10`/`hood`/`suit`/`coat`/`uniform`/`glass2` ที่มี layer พร้อมแล้วใน `pet_cat.riv` (ต้อง export `.riv` ทับไฟล์จริงเอง เพราะ MCP export ถูก gate ด้วยแพลน Rive); ยังไม่เช็ค/ทำ `pet_dog_and_cat.riv` ให้ตรงกัน

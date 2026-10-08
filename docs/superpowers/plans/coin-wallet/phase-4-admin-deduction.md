@@ -18,6 +18,7 @@ deductCoins(input: {
   amount: number;
   requestId: string;
   expectedBalance: number;
+  expectedWalletVersion: number;
 })
 ```
 
@@ -42,7 +43,9 @@ deductCoins(input: {
 - [ ] Build and smoke-test valid deduction, reload, same-ID replay, and no data for student/anonymous sessions.
 - [x] Commit: `feat: let admins deduct student reward coins`.
 
-Status: implementation and review complete. The live admin/student smoke matrix and the versioned SQL migration/pgTAP run remain open before the Phase 4 gate can be checked.
+Status: implementation, review and versioned SQL migration/pgTAP complete. The live admin/student browser smoke matrix remains open before the Phase 4 gate can be checked.
+
+Update 2026-10-01: versioned migration applied to `pet-focus`; pgTAP passed 93/93 before and after application, with fixtures rolled back. Admin tests passed 7/7, production build passed, and anonymous `/coins` redirected to `/login` (307). Authenticated browser deduction/reload/replay and student-session smoke remain open.
 
 ## Phase Gate
 

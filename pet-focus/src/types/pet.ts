@@ -29,14 +29,16 @@ export function getPetCatalogEntry(petId: PetId): PetCatalogEntry {
 }
 
 /**
- * Outfit rive inputs confirmed present on each riveSource's State Machine 1.
+ * Outfit controls supported by each Rive source (SMI inputs or ViewModel properties).
+ * New ViewModel properties require the latest runtime export from the editor.
  * omit riveSource here to apply ALL outfit inputs unfiltered; list explicitly to restrict.
  */
 export const RIVE_SOURCE_SUPPORTED_OUTFIT_INPUTS: Partial<Record<PetRiveSource, string[]>> = {
   pet_dog_and_cat: [
     'straw_hat', 'wizard_hat', 'sunglass',
-    'hat', 'hat2', 'hat3', 'hat4', 'hat5', 'hat6', 'hat7', 'hat8', 'hat9', 'hat10', 'hat11', 'hat12',
+    'hat', 'hat2', 'hat3', 'hat4', 'hat5', 'hat6', 'hat7', 'hat8', 'hat9', 'hat10', 'hat11', 'hat12', 'hat13', 'hat14', 'hat15',
     'hood', 'suit', 'uniform', 'coat', 'suit2', 'suit3', 'suit4', 'suit5', 'suit6',
+    'suit7', 'suit8', 'suit9', 'suit10', 'suit11', 'suit12', 'suit13', 'suit14', 'suit15', 'suit16',
   ],
 }
 
@@ -46,6 +48,8 @@ export const RIVE_SOURCE_SUPPORTED_OUTFIT_INPUTS: Partial<Record<PetRiveSource, 
  * not setInputState.
  */
 export const VIEW_MODEL_BOUND_OUTFIT_INPUTS: string[] = [
+  'hat13', 'hat14', 'hat15',
+  'suit7', 'suit8', 'suit9', 'suit10', 'suit11', 'suit12', 'suit13', 'suit14', 'suit15', 'suit16',
   'hat11', 'hat12', 'suit2', 'suit3', 'suit4', 'suit5', 'suit6',
 ]
 

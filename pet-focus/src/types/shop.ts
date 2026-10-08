@@ -25,6 +25,19 @@ import {
   SUIT_ROYAL_ROBE_IMG,
   SUIT_ASTRONAUT_IMG,
   SUIT_DINO_IMG,
+  HAT_NINJA_IMG,
+  HAT_HALO_IMG,
+  HAT_PIRATE_IMG,
+  SUIT_DOCTOR_IMG,
+  SUIT_ANGEL_IMG,
+  SUIT_NINJA_IMG,
+  SUIT_SAMURAI_IMG,
+  SUIT_MAID_IMG,
+  SUIT_NAVAL_CAPTAIN_IMG,
+  SUIT_PIRATE_IMG,
+  SUIT_PRINCESS_PINK_IMG,
+  SUIT_PRINCESS_GOLD_IMG,
+  SUIT_PRINCESS_BLUE_IMG,
 } from '@/assets/shopAssets'
 
 export type ItemCategory = 'outfit' | 'room' | 'background' | 'pet'
@@ -42,7 +55,7 @@ export interface ShopItem {
   description: string
   /** PNG thumbnail for outfit items */
   image?: number
-  /** Rive state machine boolean input name (outfit items) */
+  /** Rive boolean name: legacy state machine input or Hats ViewModel property. */
   riveInput?: string
   // background items only
   bgColor?: string
@@ -89,6 +102,19 @@ export const SHOP_ITEMS: ShopItem[] = [
   { id: 'outfit_royal_robe', name: 'ชุดคลุมกษัตริย์', emoji: '🐾', category: 'outfit', rarity: 'legendary', price: 850, currency: 'coin', description: 'ชุดคลุมสีน้ำเงินขลิบขนสัตว์ ประดับตราอุ้งเท้าทอง สุดหรูหรา', image: SUIT_ROYAL_ROBE_IMG, riveInput: 'suit4' },
   { id: 'outfit_astronaut', name: 'ชุดนักบินอวกาศ', emoji: '🧑‍🚀', category: 'outfit', rarity: 'rare', price: 300, currency: 'coin', description: 'ชุดนักบินอวกาศพร้อมหมวกใส ติดตราอุ้งเท้าที่หน้าอก', image: SUIT_ASTRONAUT_IMG, riveInput: 'suit5' },
   { id: 'outfit_dino', name: 'ชุดไดโนเสาร์', emoji: '🦖', category: 'outfit', rarity: 'rare', price: 260, currency: 'coin', description: 'ชุดไดโนเสาร์สีเขียวขี้เล่น ลายท้องเหลืองสไตล์การ์ตูน', image: SUIT_DINO_IMG, riveInput: 'suit6' },
+  { id: 'hat_ninja', name: 'ผ้าคาดหัวนินจา', emoji: '🥷', category: 'outfit', rarity: 'rare', price: 240, currency: 'coin', description: 'ผ้าคาดหัวสีดำสำหรับนินจาตัวน้อย', image: HAT_NINJA_IMG, riveInput: 'hat13' },
+  { id: 'hat_halo', name: 'วงแหวนเทวดา', emoji: '😇', category: 'outfit', rarity: 'legendary', price: 650, currency: 'coin', description: 'วงแหวนสีทองเปล่งประกายเหนือศีรษะ', image: HAT_HALO_IMG, riveInput: 'hat14' },
+  { id: 'hat_pirate', name: 'หมวกโจรสลัด', emoji: '🏴‍☠️', category: 'outfit', rarity: 'rare', price: 260, currency: 'coin', description: 'หมวกโจรสลัดสีดำขลิบทองพร้อมออกผจญภัย', image: HAT_PIRATE_IMG, riveInput: 'hat15' },
+  { id: 'outfit_doctor', name: 'ชุดคุณหมอ', emoji: '🩺', category: 'outfit', rarity: 'rare', price: 280, currency: 'coin', description: 'เสื้อกาวน์สีขาวพร้อมหูฟังคุณหมอ', image: SUIT_DOCTOR_IMG, riveInput: 'suit7' },
+  { id: 'outfit_angel', name: 'ชุดเทวดา', emoji: '😇', category: 'outfit', rarity: 'legendary', price: 750, currency: 'coin', description: 'ชุดสีขาวขลิบทองพร้อมปีกเทวดา', image: SUIT_ANGEL_IMG, riveInput: 'suit8' },
+  { id: 'outfit_ninja', name: 'ชุดนินจา', emoji: '🥷', category: 'outfit', rarity: 'rare', price: 300, currency: 'coin', description: 'ชุดนินจาสีดำคาดผ้าแดงพร้อมดาบคู่ใจ', image: SUIT_NINJA_IMG, riveInput: 'suit9' },
+  { id: 'outfit_samurai', name: 'ชุดซามูไร', emoji: '⚔️', category: 'outfit', rarity: 'legendary', price: 720, currency: 'coin', description: 'เกราะซามูไรสีแดงประดับลายทอง', image: SUIT_SAMURAI_IMG, riveInput: 'suit10' },
+  { id: 'outfit_maid', name: 'ชุดเมด', emoji: '🎀', category: 'outfit', rarity: 'rare', price: 260, currency: 'coin', description: 'ชุดเมดสีดำขาวแต่งระบายและโบว์แดง', image: SUIT_MAID_IMG, riveInput: 'suit11' },
+  { id: 'outfit_naval_captain', name: 'ชุดกัปตันเรือ', emoji: '⚓', category: 'outfit', rarity: 'legendary', price: 700, currency: 'coin', description: 'เสื้อกัปตันสีน้ำเงินเข้มประดับขอบทอง', image: SUIT_NAVAL_CAPTAIN_IMG, riveInput: 'suit12' },
+  { id: 'outfit_pirate', name: 'ชุดโจรสลัด', emoji: '🏴‍☠️', category: 'outfit', rarity: 'rare', price: 280, currency: 'coin', description: 'ชุดโจรสลัดสีแดงพร้อมเข็มขัดสำหรับนักผจญภัย', image: SUIT_PIRATE_IMG, riveInput: 'suit13' },
+  { id: 'outfit_princess_pink', name: 'ชุดเจ้าหญิงสีชมพู', emoji: '👗', category: 'outfit', rarity: 'legendary', price: 680, currency: 'coin', description: 'ชุดกระโปรงสีชมพูประดับโบว์และระบาย', image: SUIT_PRINCESS_PINK_IMG, riveInput: 'suit14' },
+  { id: 'outfit_princess_gold', name: 'ชุดเจ้าหญิงสีทอง', emoji: '👗', category: 'outfit', rarity: 'legendary', price: 700, currency: 'coin', description: 'ชุดกระโปรงสีเหลืองทองประดับดอกไม้', image: SUIT_PRINCESS_GOLD_IMG, riveInput: 'suit15' },
+  { id: 'outfit_princess_blue', name: 'ชุดเจ้าหญิงสีฟ้า', emoji: '👗', category: 'outfit', rarity: 'legendary', price: 680, currency: 'coin', description: 'ชุดกระโปรงสีฟ้าขลิบลายทองอ่อนหวาน', image: SUIT_PRINCESS_BLUE_IMG, riveInput: 'suit16' },
   // { id: 'scarf_red', name: 'ผ้าพันคอแดง', emoji: '🧣', category: 'outfit', rarity: 'common', price: 80, currency: 'coin', description: 'อบอุ่นสบายใจ' },
   // { id: 'wings_butterfly', name: 'ปีกผีเสื้อ', emoji: '🦋', category: 'outfit', rarity: 'rare', price: 300, currency: 'coin', description: 'บินได้เหมือนนางฟ้า' },
   // { id: 'crown_gold', name: 'มงกุฎทอง', emoji: '👑', category: 'outfit', rarity: 'legendary', price: 800, currency: 'coin', description: 'ราชาแห่งโฟกัส' },

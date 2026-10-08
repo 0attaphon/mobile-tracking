@@ -117,4 +117,29 @@ describe('transactional purchase state', () => {
 
     expect(dependencies.refreshWalletAndInventory).toHaveBeenCalledOnce()
   })
+
+  it('reuses the persisted request after a process restart and successful replay', async () => {
+    dependencies.purchaseItem.mockRejectedValueOnce(
+      Object.assign(new Error('timeout'), { code: 'OFFLINE' })
+    )
+    await usePurchaseStore.getState().submitPurchase('student-a', 'hat_straw', 1)
+
+    // Simulate losing in-memory state after the server may have committed.
+    usePurchaseStore.setState({ pendingPurchase: null, lastError: null })
+    await usePurchaseStore.getState().restorePendingPurchase('student-a')
+    dependencies.purchaseItem.mockResolvedValueOnce(undefined)
+
+    await expect(
+      usePurchaseStore.getState().submitPurchase('student-a', 'hat_straw', 1)
+    ).resolves.toBe(true)
+
+    expect(dependencies.purchaseItem).toHaveBeenNthCalledWith(
+      2, 'hat_straw', 1, 'purchase-request-1'
+    )
+    expect(dependencies.randomUUID).toHaveBeenCalledOnce()
+    expect(storage.size).toBe(0)
+    expect(usePurchaseStore.getState()).toMatchObject({
+      pendingPurchase: null, isSubmitting: false, lastError: null,
+    })
+  })
 })
