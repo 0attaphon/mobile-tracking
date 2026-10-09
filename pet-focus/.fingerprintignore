@@ -1,0 +1,5 @@
+# Local `expo run:android` writes Gradle outputs into these package sources.
+# EAS installs node_modules clean, so hashing them makes the local runtime
+# version differ from the build's and the EAS build fails.
+node_modules/react-native-fast-tflite/android/src/main/cpp/lib/**/*
+node_modules/expo-dev-menu/android/src/debug/assets/**/*
