@@ -16,6 +16,7 @@ export type WalletErrorCode =
   | 'ALREADY_OWNED'
   | 'IDEMPOTENCY_CONFLICT'
   | 'FOCUS_SESSION_ACTIVE'
+  | 'CATALOG_ITEM_UNAVAILABLE'
   | 'OFFLINE'
   | 'UNKNOWN'
 
@@ -43,6 +44,7 @@ const STABLE_SERVER_CODES: WalletErrorCode[] = [
   'ALREADY_OWNED',
   'IDEMPOTENCY_CONFLICT',
   'FOCUS_SESSION_ACTIVE',
+  'CATALOG_ITEM_UNAVAILABLE',
 ]
 
 function firstRow(data: unknown): Record<string, unknown> | null {
@@ -291,6 +293,42 @@ export async function refreshWalletAndInventory(): Promise<void> {
 
     usePetStore.getState().hydrateCoins(wallet.confirmedBalance)
     useUserStore.getState().hydrateOwnedItems(ownedItems)
+  } catch (error) {
+    throw toWalletError(error)
+  }
+}
+
+export type ShopCatalog = {
+  version: number
+  prices: Record<string, number>
+}
+
+/** Active server catalog — the prices purchase_shop_item actually charges. */
+export async function fetchShopCatalog(): Promise<ShopCatalog> {
+  requireConfigured()
+  try {
+    const { data, error } = await supabase.rpc('get_shop_catalog')
+    if (error) throw error
+    if (!Array.isArray(data) || data.length === 0) {
+      throw new WalletError('UNKNOWN', 'INVALID_CATALOG_RESPONSE')
+    }
+    let version: number | null = null
+    const prices: Record<string, number> = {}
+    for (const value of data) {
+      const row = value && typeof value === 'object' ? (value as Record<string, unknown>) : null
+      if (
+        !row ||
+        typeof row.version !== 'number' ||
+        typeof row.item_id !== 'string' ||
+        typeof row.price !== 'number' ||
+        (version !== null && row.version !== version)
+      ) {
+        throw new WalletError('UNKNOWN', 'INVALID_CATALOG_RESPONSE')
+      }
+      version = row.version
+      prices[row.item_id] = row.price
+    }
+    return { version: version as number, prices }
   } catch (error) {
     throw toWalletError(error)
   }

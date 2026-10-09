@@ -6,6 +6,7 @@ const dependencies = vi.hoisted(() => ({
   getNetworkStateAsync: vi.fn(),
   purchaseItem: vi.fn(),
   refreshWalletAndInventory: vi.fn(),
+  fetchShopCatalog: vi.fn(),
 }))
 
 vi.mock('@react-native-async-storage/async-storage', () => ({
@@ -24,6 +25,7 @@ vi.mock('expo-network', () => ({ getNetworkStateAsync: dependencies.getNetworkSt
 vi.mock('@/services/supabase/wallet', () => ({
   purchaseItem: dependencies.purchaseItem,
   refreshWalletAndInventory: dependencies.refreshWalletAndInventory,
+  fetchShopCatalog: dependencies.fetchShopCatalog,
 }))
 
 import { usePurchaseStore } from '../purchaseStore'
@@ -38,7 +40,10 @@ beforeEach(() => {
   })
   dependencies.purchaseItem.mockResolvedValue(undefined)
   dependencies.refreshWalletAndInventory.mockResolvedValue(undefined)
-  usePurchaseStore.setState({ isSubmitting: false, pendingPurchase: null, lastError: null })
+  dependencies.fetchShopCatalog.mockResolvedValue({ version: 2, prices: { hat_straw: 75 } })
+  usePurchaseStore.setState({
+    isSubmitting: false, pendingPurchase: null, lastError: null, catalog: null,
+  })
 })
 
 describe('transactional purchase state', () => {
@@ -64,7 +69,8 @@ describe('transactional purchase state', () => {
     )
 
     const first = usePurchaseStore.getState().submitPurchase('student-a', 'hat_straw', 1)
-    await vi.waitFor(() => expect(usePurchaseStore.getState().isSubmitting).toBe(true))
+    await vi.waitFor(() => expect(dependencies.purchaseItem).toHaveBeenCalledOnce())
+    expect(usePurchaseStore.getState().isSubmitting).toBe(true)
     const second = await usePurchaseStore
       .getState()
       .submitPurchase('student-a', 'hat_straw', 1)
@@ -112,10 +118,78 @@ describe('transactional purchase state', () => {
     expect(dependencies.randomUUID).toHaveBeenCalledOnce()
   })
 
+  it('replays a retained request at its own version, then retries fresh when that version is retired', async () => {
+    const unavailable = () =>
+      Object.assign(new Error('CATALOG_ITEM_UNAVAILABLE'), { code: 'CATALOG_ITEM_UNAVAILABLE' })
+    dependencies.randomUUID
+      .mockReturnValueOnce('purchase-request-1')
+      .mockReturnValueOnce('purchase-request-2')
+    dependencies.purchaseItem
+      .mockRejectedValueOnce(Object.assign(new Error('timeout'), { code: 'OFFLINE' }))
+      .mockRejectedValueOnce(unavailable())
+      .mockResolvedValueOnce(undefined)
+
+    await usePurchaseStore.getState().submitPurchase('student-a', 'hat_straw', 1)
+    await expect(
+      usePurchaseStore.getState().submitPurchase('student-a', 'hat_straw', 2)
+    ).resolves.toBe(true)
+
+    expect(dependencies.purchaseItem).toHaveBeenNthCalledWith(2, 'hat_straw', 1, 'purchase-request-1')
+    expect(dependencies.purchaseItem).toHaveBeenNthCalledWith(3, 'hat_straw', 2, 'purchase-request-2')
+    expect(storage.size).toBe(0)
+    expect(usePurchaseStore.getState()).toMatchObject({ pendingPurchase: null, lastError: null })
+  })
+
+  it('completes a retained request that committed under an older version', async () => {
+    dependencies.purchaseItem
+      .mockRejectedValueOnce(Object.assign(new Error('timeout'), { code: 'OFFLINE' }))
+      .mockResolvedValueOnce(undefined)
+
+    await usePurchaseStore.getState().submitPurchase('student-a', 'hat_straw', 1)
+    await expect(
+      usePurchaseStore.getState().submitPurchase('student-a', 'hat_straw', 2)
+    ).resolves.toBe(true)
+
+    expect(dependencies.purchaseItem).toHaveBeenCalledTimes(2)
+    expect(dependencies.purchaseItem).toHaveBeenNthCalledWith(2, 'hat_straw', 1, 'purchase-request-1')
+    expect(storage.size).toBe(0)
+  })
+
+  it('clears a request for an item the active catalog no longer sells', async () => {
+    dependencies.purchaseItem.mockRejectedValue(
+      Object.assign(new Error('CATALOG_ITEM_UNAVAILABLE'), { code: 'CATALOG_ITEM_UNAVAILABLE' })
+    )
+
+    await expect(
+      usePurchaseStore.getState().submitPurchase('student-a', 'hat_straw', 1)
+    ).resolves.toBe(false)
+
+    expect(dependencies.purchaseItem).toHaveBeenCalledOnce()
+    expect(storage.size).toBe(0)
+    expect(usePurchaseStore.getState()).toMatchObject({
+      pendingPurchase: null, lastError: 'CATALOG_ITEM_UNAVAILABLE',
+    })
+  })
+
   it('refreshes the authoritative shop snapshot on focus', async () => {
     await usePurchaseStore.getState().refreshShop()
 
     expect(dependencies.refreshWalletAndInventory).toHaveBeenCalledOnce()
+    expect(usePurchaseStore.getState().catalog).toEqual({
+      version: 2, prices: { hat_straw: 75 },
+    })
+  })
+
+  it('keeps the last catalog when a catalog refresh fails', async () => {
+    usePurchaseStore.setState({ catalog: { version: 1, prices: { hat_straw: 60 } } })
+    dependencies.fetchShopCatalog.mockRejectedValueOnce(new Error('Failed to fetch'))
+
+    await expect(usePurchaseStore.getState().refreshShop()).rejects.toThrow()
+
+    expect(dependencies.refreshWalletAndInventory).toHaveBeenCalledOnce()
+    expect(usePurchaseStore.getState().catalog).toEqual({
+      version: 1, prices: { hat_straw: 60 },
+    })
   })
 
   it('reuses the persisted request after a process restart and successful replay', async () => {

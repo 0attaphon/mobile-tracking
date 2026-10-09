@@ -39,6 +39,7 @@ export default function ShopScreen() {
   const submitPurchase = usePurchaseStore((s) => s.submitPurchase)
   const restorePendingPurchase = usePurchaseStore((s) => s.restorePendingPurchase)
   const refreshShop = usePurchaseStore((s) => s.refreshShop)
+  const catalog = usePurchaseStore((s) => s.catalog)
   const petHydrated = usePetStore((s) => s._hasHydrated)
   const storageReady = userHydrated && petHydrated
   const { setBackground, toggleDecoration, selectedBgId, placedDecorations } = useRoomStore()
@@ -67,7 +68,13 @@ export default function ShopScreen() {
     }, [inventoryMigrationState, refreshShop, studentId])
   )
 
-  const filteredItems = SHOP_ITEMS.filter((i) => i.category === activeCategory)
+  // Server catalog is the price purchase_shop_item charges; SHOP_ITEMS.price is
+  // only an offline fallback until the first catalog fetch succeeds.
+  const priceOf = (item: ShopItem) => catalog?.prices[item.id] ?? item.price
+  const filteredItems = SHOP_ITEMS.filter((i) => i.category === activeCategory).map((i) => ({
+    ...i,
+    price: priceOf(i),
+  }))
 
   function handleItemPress(item: ShopItem) {
     if (item.category === 'pet' && item.petId) {
@@ -113,11 +120,20 @@ export default function ShopScreen() {
       Alert.alert('กำลังเตรียมกระเป๋าเหรียญ', 'รอให้ตรวจสอบยอดเดิมเสร็จก่อนซื้อสินค้า')
       return
     }
-    const purchased = await submitPurchase(studentId, id, 1)
+    if (!usePurchaseStore.getState().catalog) await refreshShop().catch(() => {})
+    const catalogVersion = usePurchaseStore.getState().catalog?.version
+    if (catalogVersion === undefined) {
+      Alert.alert('โหลดราคาสินค้าไม่สำเร็จ', 'ตรวจสอบอินเทอร์เน็ตแล้วลองใหม่อีกครั้ง')
+      return
+    }
+    const purchased = await submitPurchase(studentId, id, catalogVersion)
     if (!purchased) {
       const error = usePurchaseStore.getState().lastError
       if (error === 'INSUFFICIENT_COINS') {
         Alert.alert('⭐ เหรียญไม่พอ', `ยอดเหรียญที่ยืนยันแล้วไม่พอซื้อ ${selectedItem.name}`)
+      } else if (error === 'CATALOG_ITEM_UNAVAILABLE') {
+        refreshShop().catch(() => {})
+        Alert.alert('ราคาสินค้ามีการเปลี่ยนแปลง', 'ระบบโหลดรายการสินค้าล่าสุดแล้ว ลองตรวจสอบแล้วซื้ออีกครั้ง')
       } else if (error === 'OFFLINE') {
         const retained = usePurchaseStore.getState().pendingPurchase?.itemId === id
         Alert.alert(
@@ -244,7 +260,7 @@ export default function ShopScreen() {
                             ? 'กำลังซื้อ...'
                             : pendingPurchase?.itemId === selectedItem.id
                               ? 'ลองคำขอเดิมอีกครั้ง'
-                              : `ซื้อ ${selectedItem.price} ⭐`}
+                              : `ซื้อ ${priceOf(selectedItem)} ⭐`}
                     </Text>
                   </TouchableOpacity>
                 </View>

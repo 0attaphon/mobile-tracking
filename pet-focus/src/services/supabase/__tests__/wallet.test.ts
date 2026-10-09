@@ -49,6 +49,7 @@ import {
   enqueueReward,
   fetchWallet,
   fetchCoinHistory,
+  fetchShopCatalog,
   flushPendingRewards,
   importLegacyInventory,
   issueRewardChallenge,
@@ -129,6 +130,7 @@ describe('wallet client', () => {
     ['ALREADY_OWNED', 'ALREADY_OWNED'],
     ['IDEMPOTENCY_CONFLICT', 'IDEMPOTENCY_CONFLICT'],
     ['FOCUS_SESSION_ACTIVE', 'FOCUS_SESSION_ACTIVE'],
+    ['CATALOG_ITEM_UNAVAILABLE', 'CATALOG_ITEM_UNAVAILABLE'],
     ['Failed to fetch', 'OFFLINE'],
     ['unexpected database error', 'UNKNOWN'],
   ] as const)('maps %s to the stable %s code', async (message, code) => {
@@ -289,6 +291,33 @@ describe('wallet client', () => {
     await purchaseItem('hat_straw', 1, 'request-1')
 
     expect(walletState.hydrateOwnedItems).toHaveBeenCalledWith(['hat_straw'])
+  })
+
+  it('fetches active server catalog prices and version', async () => {
+    client.rpc.mockResolvedValue({
+      data: [
+        { version: 2, item_id: 'hat_straw', price: 75 },
+        { version: 2, item_id: 'bg_sky', price: 40 },
+      ],
+      error: null,
+    })
+
+    await expect(fetchShopCatalog()).resolves.toEqual({
+      version: 2,
+      prices: { hat_straw: 75, bg_sky: 40 },
+    })
+    expect(client.rpc).toHaveBeenCalledWith('get_shop_catalog')
+  })
+
+  it('rejects an empty or malformed catalog response', async () => {
+    client.rpc.mockResolvedValueOnce({ data: [], error: null })
+    await expect(fetchShopCatalog()).rejects.toBeInstanceOf(WalletError)
+
+    client.rpc.mockResolvedValueOnce({
+      data: [{ version: 1, item_id: 'hat_straw', price: '75' }],
+      error: null,
+    })
+    await expect(fetchShopCatalog()).rejects.toBeInstanceOf(WalletError)
   })
 
   it('uses the caller request id unchanged when retrying a timeout', async () => {
